@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "absl/log/absl_log.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
@@ -118,6 +119,14 @@ class Engine {
     // Returns the benchmark info for the session. Returns error if the
     // benchmark is not enabled.
     virtual absl::StatusOr<BenchmarkInfo> GetBenchmarkInfo() = 0;
+
+    // Cancels the ongoing inference process. Note that if this function is
+    // called, the inference process will return with a kCancelled error.
+    // Also, the session object should be discarded after this call as it cannot
+    // be used for further inference.
+    virtual void CancelProcess() {
+      ABSL_LOG(FATAL) << "CancelProcess is not implemented.";
+    }
   };
 
   // Method to create Engine.

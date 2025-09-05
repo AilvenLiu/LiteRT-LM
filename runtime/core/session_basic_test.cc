@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/synchronization/notification.h"  // from @com_google_absl
+#include "absl/time/clock.h"  // from @com_google_absl
 #include "absl/time/time.h"  // from @com_google_absl
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
 #include "litert/test/matchers.h"  // from @litert
@@ -211,8 +212,7 @@ TEST_F(SessionBasicTest, GenerateContentStream) {
   auto session =
       SessionBasic::Create(executor_.get(), tokenizer_.get(),
                            /*image_preprocessor=*/nullptr,
-                           /*vision_executor=*/nullptr,
-                           session_config,
+                           /*vision_executor=*/nullptr, session_config,
                            std::nullopt, worker_thread_pool_.get());
 
   std::vector<InputData> inputs;
@@ -235,8 +235,7 @@ TEST_F(SessionBasicTest, GenerateContentStreamEmptyInput) {
   auto session =
       SessionBasic::Create(executor_.get(), tokenizer_.get(),
                            /*image_preprocessor=*/nullptr,
-                           /*vision_executor=*/nullptr,
-                           session_config,
+                           /*vision_executor=*/nullptr, session_config,
                            std::nullopt, worker_thread_pool_.get());
 
   std::vector<InputData> inputs;
@@ -260,8 +259,7 @@ TEST_F(SessionBasicTest, GenerateContentStreamPrefillError) {
   auto session =
       SessionBasic::Create(executor_.get(), tokenizer_.get(),
                            /*image_preprocessor=*/nullptr,
-                           /*vision_executor=*/nullptr,
-                           session_config,
+                           /*vision_executor=*/nullptr, session_config,
                            std::nullopt, worker_thread_pool_.get());
 
   std::vector<InputData> inputs;
@@ -288,8 +286,7 @@ TEST_F(SessionBasicTest, GenerateContentStreamDecodeError) {
   auto session =
       SessionBasic::Create(executor_.get(), tokenizer_.get(),
                            /*image_preprocessor=*/nullptr,
-                           /*vision_executor=*/nullptr,
-                           session_config,
+                           /*vision_executor=*/nullptr, session_config,
                            std::nullopt, worker_thread_pool_.get());
 
   std::vector<InputData> inputs;
@@ -457,6 +454,70 @@ TEST_F(SessionBasicTest, ProcessAndCombineContentsAudioFails) {
   EXPECT_THAT(result, testing::status::StatusIs(
                           absl::StatusCode::kUnimplemented,
                           "Audio prefill is not implemented yet."));
+}
+
+TEST_F(SessionBasicTest, GenerateContentStreamWithCancellation) {
+  // Configure the executor to have a delay to simulate a long-running task.
+  auto* fake_executor = static_cast<FakeLlmExecutor*>(executor_.get());
+  fake_executor->SetDecodeDelay(absl::Milliseconds(200));
+
+  const std::vector<std::vector<int>> stop_token_ids = {{2294}};
+  SessionConfig session_config = SessionConfig::CreateDefault();
+  session_config.GetMutableSamplerParams() = sampler_params_;
+  session_config.GetMutableStopTokenIds() = stop_token_ids;
+  session_config.SetStartTokenId(2);
+  session_config.SetSamplerBackend(Backend::CPU);
+  auto session =
+      SessionBasic::Create(executor_.get(), tokenizer_.get(),
+                           /*image_preprocessor=*/nullptr,
+                           /*vision_executor=*/nullptr, session_config,
+                           std::nullopt, worker_thread_pool_.get());
+  ASSERT_OK(session);
+
+  std::vector<InputData> inputs;
+  inputs.emplace_back(InputText("Hello World!"));
+  StreamingTestObserver observer;
+
+  // Run GenerateContentStream in a separate thread.
+  ASSERT_OK(worker_thread_pool_->Schedule([&]() {
+    (*session)->GenerateContentStream(inputs, &observer).IgnoreError();
+  }));
+
+  // Wait for a short time to ensure the decoding has started.
+  absl::SleepFor(absl::Milliseconds(100));
+
+  // Cancel the process.
+  (*session)->CancelProcess();
+
+  // Wait for the observer to be done.
+  absl::Status status = observer.WaitUntilDone();
+  EXPECT_THAT(status, testing::status::StatusIs(absl::StatusCode::kCancelled));
+}
+
+TEST_F(SessionBasicTest, GenerateContentStreamOnCancelledSession) {
+  const std::vector<std::vector<int>> stop_token_ids = {{2294}};
+  SessionConfig session_config = SessionConfig::CreateDefault();
+  session_config.GetMutableSamplerParams() = sampler_params_;
+  session_config.GetMutableStopTokenIds() = stop_token_ids;
+  session_config.SetStartTokenId(2);
+  session_config.SetSamplerBackend(Backend::CPU);
+  auto session =
+      SessionBasic::Create(executor_.get(), tokenizer_.get(),
+                           /*image_preprocessor=*/nullptr,
+                           /*vision_executor=*/nullptr, session_config,
+                           std::nullopt, worker_thread_pool_.get());
+  ASSERT_OK(session);
+
+  (*session)->CancelProcess();
+
+  std::vector<InputData> inputs;
+  inputs.emplace_back(InputText("Hello World!"));
+  StreamingTestObserver observer;
+  // The session is cancelled, so the call should return with a kCancelled
+  // error.
+  EXPECT_OK((*session)->GenerateContentStream(inputs, &observer));
+  // Wait for the observer to be done.
+  EXPECT_OK(observer.WaitUntilDone());
 }
 
 }  // namespace

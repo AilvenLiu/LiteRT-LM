@@ -15,14 +15,13 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LM_RUNTIME_EXECUTOR_MOCK_LLM_EXECUTOR_H_
 #define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_EXECUTOR_MOCK_LLM_EXECUTOR_H_
 
-#include <cstdint>
 #include <optional>
 #include <vector>
 
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
-#include "absl/types/span.h"  // from @com_google_absl
+#include "absl/time/time.h"  // from @com_google_absl
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
 #include "runtime/executor/llm_executor.h"
 #include "runtime/executor/llm_executor_io_types.h"
@@ -79,9 +78,7 @@ class FakeLlmExecutor : public LlmExecutor {
   absl::StatusOr<LlmExecutorSettings*> GetMutableExecutorSettings() {
     return &executor_settings_;
   };
-  absl::StatusOr<int> GetCurrentStep() const override {
-    return current_step_;
-  }
+  absl::StatusOr<int> GetCurrentStep() const override { return current_step_; }
 
   // Sets the status to be returned by the Prefill function.
   void SetPrefillStatus(const absl::Status& status) {
@@ -91,7 +88,19 @@ class FakeLlmExecutor : public LlmExecutor {
   // Sets the status to be returned by the Decode function.
   void SetDecodeStatus(const absl::Status& status) { decode_status_ = status; }
 
+  // Sets the delay before decoding. Useful for testing the cancellation
+  // logic. The default value is 0, which means no delay.
+  void SetDecodeDelay(absl::Duration delay) {
+    decode_delay_ = delay;
+  }
+
+  absl::Status Reset() override;
+
  private:
+  // Util function to try to sleep for the decode delay duration (if set). This
+  // is used to simulate a long-running task.
+  void TryDecodeDelay();
+
   int vocab_size_;
   std::vector<std::vector<int>> prefill_tokens_set_;
   std::vector<std::vector<int>> decode_tokens_set_;
@@ -113,6 +122,10 @@ class FakeLlmExecutor : public LlmExecutor {
   absl::Status prefill_status_ = absl::OkStatus();
   // The status to be returned by the Decode function.
   absl::Status decode_status_ = absl::OkStatus();
+
+  // The delay before decoding. Useful for testing the cancellation logic.
+  // The default value is 0, which means no delay.
+  absl::Duration decode_delay_;
 };
 
 }  // namespace litert::lm

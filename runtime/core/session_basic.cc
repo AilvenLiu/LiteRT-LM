@@ -298,6 +298,10 @@ absl::Status SessionBasic::RunPrefill(const std::vector<InputData>& contents) {
   if (contents.empty()) {
     return absl::InvalidArgumentError("Input is empty.");
   }
+  if (cancelled_.load()) {
+    // Reset the cancelled flag before processing the next turn.
+    cancelled_ = false;
+  }
   ASSIGN_OR_RETURN(std::vector<InputData> preprocessed_contents,
                    PreprocessContents(contents));
   absl::Status status;
@@ -315,6 +319,10 @@ absl::Status SessionBasic::RunPrefillAsync(
     const std::vector<InputData>& contents, InferenceObservable* observer) {
   if (contents.empty()) {
     return absl::InvalidArgumentError("Input is empty.");
+  }
+  if (cancelled_.load()) {
+    // Reset the cancelled flag before processing the next turn.
+    cancelled_ = false;
   }
   ASSIGN_OR_RETURN(std::vector<InputData> preprocessed_contents,
                    PreprocessContents(contents));
@@ -335,9 +343,9 @@ absl::Status SessionBasic::RunPrefillAsync(
 
 absl::StatusOr<Responses> SessionBasic::DecodeInternal() {
   if (sampler_ == nullptr) {
-    ASSIGN_OR_RETURN(
-        auto responses,
-        Decode(executor_, tokenizer_, stop_token_detector_, benchmark_info_));
+    ASSIGN_OR_RETURN(auto responses,
+                     Decode(executor_, tokenizer_, stop_token_detector_,
+                            benchmark_info_, &cancelled_));
     return responses;
   } else {
     std::vector<int> decoded_ids(session_config_.GetNumOutputCandidates(),
@@ -348,7 +356,8 @@ absl::StatusOr<Responses> SessionBasic::DecodeInternal() {
         auto responses,
         DecodeCustomSampling(executor_, tokenizer_, stop_token_detector_,
                              /*num_output_candidates=*/1, *sampler_,
-                             *decoded_ids_buffer, benchmark_info_));
+                             *decoded_ids_buffer, benchmark_info_,
+                             &cancelled_));
     return responses;
   }
 }
@@ -357,7 +366,8 @@ absl::Status SessionBasic::DecodeInternalStreaming(
     InferenceObservable* observer) {
   if (sampler_ == nullptr) {
     RETURN_IF_ERROR(DecodeStreaming(executor_, tokenizer_, stop_token_detector_,
-                                    benchmark_info_, observer));
+                                    benchmark_info_, observer,
+                                    &cancelled_));
   } else {
     std::vector<int> decoded_ids(session_config_.GetNumOutputCandidates(),
                                  last_prefill_token_id_);
@@ -366,13 +376,17 @@ absl::Status SessionBasic::DecodeInternalStreaming(
     RETURN_IF_ERROR(DecodeCustomSamplingStreaming(
         executor_, tokenizer_, stop_token_detector_,
         /*num_output_candidates=*/1, *sampler_, *decoded_ids_buffer,
-        benchmark_info_, observer));
+        benchmark_info_, observer, &cancelled_));
   }
   return absl::OkStatus();
 }
 
 absl::StatusOr<Responses> SessionBasic::RunDecode() {
   ABSL_LOG(INFO) << "RunDecodeSync";
+  if (cancelled_.load()) {
+    // Reset the cancelled flag before processing the next turn.
+    cancelled_ = false;
+  }
   absl::StatusOr<Responses> responses;
   RETURN_IF_ERROR(worker_thread_pool_.Schedule(
       [this, &responses]() { responses = this->DecodeInternal(); }));
@@ -382,6 +396,10 @@ absl::StatusOr<Responses> SessionBasic::RunDecode() {
 
 absl::Status SessionBasic::RunDecodeAsync(InferenceObservable* observer) {
   ABSL_LOG(INFO) << "RunDecodeAsync";
+  if (cancelled_.load()) {
+    // Reset the cancelled flag before processing the next turn.
+    cancelled_ = false;
+  }
   return worker_thread_pool_.Schedule([this, observer]() {
     this->DecodeInternalStreaming(observer).IgnoreError();
   });
@@ -389,12 +407,20 @@ absl::Status SessionBasic::RunDecodeAsync(InferenceObservable* observer) {
 
 absl::StatusOr<Responses> SessionBasic::GenerateContent(
     const std::vector<InputData>& contents) {
+  if (cancelled_.load()) {
+    // Reset the cancelled flag before processing the next turn.
+    cancelled_ = false;
+  }
   RETURN_IF_ERROR(RunPrefill(contents));
   return RunDecode();
 }
 
 absl::Status SessionBasic::GenerateContentStream(
     const std::vector<InputData>& contents, InferenceObservable* observer) {
+  if (cancelled_.load()) {
+    // Reset the cancelled flag before processing the next turn.
+    cancelled_ = false;
+  }
   // An observer to handle the result of the async prefill operation.
   // It triggers the decode step if prefill is successful, or propagates the
   // error.

@@ -92,6 +92,7 @@ FakeLlmExecutor::FakeLlmExecutor(
   // Set default testing max num tokens to 1024.
   executor_settings_.SetMaxNumTokens(1024);
   current_step_ = 0;
+  decode_delay_ = absl::ZeroDuration();
 }
 
 absl::Status FakeLlmExecutor::Prefill(const ExecutorInputs& inputs) {
@@ -137,6 +138,7 @@ absl::Status FakeLlmExecutor::Prefill(
 }
 
 absl::Status FakeLlmExecutor::Decode(::litert::TensorBuffer& output_tokens) {
+  TryDecodeDelay();
   RETURN_IF_ERROR(decode_status_);
   if (decode_times_ >= decode_tokens_set_.size()) {
     return absl::InvalidArgumentError(absl::StrCat(
@@ -155,6 +157,7 @@ absl::Status FakeLlmExecutor::Decode(::litert::TensorBuffer& output_tokens) {
 
 absl::Status FakeLlmExecutor::Decode(const ExecutorInputs& inputs,
                                      ::litert::TensorBuffer& output_logits) {
+  TryDecodeDelay();
   RETURN_IF_ERROR(decode_status_);
   if (decode_times_ >= decode_tokens_set_.size()) {
     return absl::InvalidArgumentError(absl::StrCat(
@@ -178,6 +181,7 @@ absl::Status FakeLlmExecutor::Decode(const ExecutorInputs& inputs,
 
 absl::StatusOr<::litert::TensorBuffer> FakeLlmExecutor::DecodeLogits(
     const ExecutorInputs& inputs) {
+  TryDecodeDelay();
   RETURN_IF_ERROR(decode_status_);
   if (decode_times_ >= decode_tokens_set_.size()) {
     return absl::InvalidArgumentError(absl::StrCat(
@@ -200,6 +204,20 @@ absl::StatusOr<::litert::TensorBuffer> FakeLlmExecutor::DecodeLogits(
   decode_times_++;
   current_step_++;
   return std::move(output_logits);
+}
+
+void FakeLlmExecutor::TryDecodeDelay() {
+  if (decode_delay_ > absl::ZeroDuration()) {
+    absl::SleepFor(decode_delay_);
+    decode_delay_ = absl::ZeroDuration();
+  }
+}
+
+absl::Status FakeLlmExecutor::Reset() {
+  prefill_times_ = 0;
+  decode_times_ = 0;
+  current_step_ = 0;
+  return absl::OkStatus();
 }
 
 }  // namespace litert::lm

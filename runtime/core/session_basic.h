@@ -15,6 +15,7 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LM_RUNTIME_CORE_SESSION_BASIC_H_
 #define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_CORE_SESSION_BASIC_H_
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <string>
@@ -77,6 +78,8 @@ class SessionBasic : public Engine::Session {
       InferenceObservable* observer) override;
 
   absl::StatusOr<BenchmarkInfo> GetBenchmarkInfo() override;
+
+  void CancelProcess() override { cancelled_ = true; }
 
   // Util function for applying the prompt templates.
   // input: The input text to apply the prompt templates.
@@ -171,6 +174,9 @@ class SessionBasic : public Engine::Session {
   // current turn is the first turn. Should be removed once prompt templates
   // is no longer used.
   bool is_first_turn_ = true;
+
+  // An atomic boolean to indicate whether the session is cancelled.
+  std::atomic<bool> cancelled_{false};
 };
 
 }  // namespace litert::lm

@@ -21,6 +21,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "absl/status/status.h"  // from @com_google_absl
+#include "absl/time/clock.h"  // from @com_google_absl
+#include "absl/time/time.h"  // from @com_google_absl
 #include "absl/types/span.h"  // from @com_google_absl
 #include "litert/test/matchers.h"  // from @litert
 #include "runtime/executor/llm_executor_io_types.h"
@@ -215,6 +217,23 @@ TEST(FakeLlmExecutorTest, DecodeLogits) {
   // Call Decode for the 3nd time. Should fail.
   EXPECT_THAT(fake_llm_executor.Decode(inputs, *output_logits),
               StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(FakeLlmExecutorTest, DecodeDelay) {
+  const std::vector<std::vector<int>> prefill_tokens_set = {{1, 2, 3}};
+  const std::vector<std::vector<int>> decode_tokens_set = {{3}, {0}};
+  FakeLlmExecutor fake_llm_executor(/*vocab_size=*/4, prefill_tokens_set,
+                                    decode_tokens_set);
+
+  constexpr absl::Duration delay = absl::Milliseconds(100);
+  fake_llm_executor.SetDecodeDelay(delay);
+
+  LITERT_ASSERT_OK_AND_ASSIGN(auto output_tokens,
+                              CreateTensorBuffer<int>({1, 1}));
+  const absl::Time start = absl::Now();
+  EXPECT_OK(fake_llm_executor.Decode(output_tokens));
+  const absl::Duration elapsed = absl::Now() - start;
+  EXPECT_GE(elapsed, delay);
 }
 
 }  // namespace

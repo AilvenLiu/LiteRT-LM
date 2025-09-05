@@ -14,6 +14,7 @@
 
 #include "runtime/core/pipeline.h"
 
+#include <atomic>
 #include <limits>
 #include <optional>
 #include <queue>
@@ -254,7 +255,8 @@ absl::StatusOr<Responses> DecodeLoop(
     std::optional<BenchmarkInfo>& benchmark_info,
     std::optional<Sampler*> sampler,
     std::optional<litert::TensorBuffer*> decoded_ids,
-    std::optional<InferenceObservable*> observer) {
+    std::optional<InferenceObservable*> observer,
+    std::atomic<bool>* cancelled) {
   const bool is_streaming = observer.has_value();
   const bool is_custom_sampling = sampler.has_value();
 
@@ -274,6 +276,12 @@ absl::StatusOr<Responses> DecodeLoop(
   DecodeOneStep run_one_step(&executor, &tokenizer, num_output_candidates,
                              stop_token_detector, benchmark_info, sampler);
   while (true) {
+    if (cancelled != nullptr && cancelled->load()) {
+      if (is_streaming) {
+        observer.value()->OnError(absl::CancelledError("Process cancelled."));
+      }
+      return absl::CancelledError("Process cancelled.");
+    }
     absl::StatusOr<bool> all_done = run_one_step.Run(decoded_ids);
     if (!all_done.ok()) {
       if (is_streaming) observer.value()->OnError(all_done.status());
@@ -383,17 +391,19 @@ absl::StatusOr<int> Prefill(LlmExecutor& executor, ExecutorInputs& inputs,
 
 absl::StatusOr<Responses> Decode(LlmExecutor& executor, Tokenizer& tokenizer,
                                  const StopTokenDetector& stop_token_detector,
-                                 std::optional<BenchmarkInfo>& benchmark_info) {
+                                 std::optional<BenchmarkInfo>& benchmark_info,
+                                 std::atomic<bool>* cancelled) {
   const int num_output_candidates = 1;
   return DecodeLoop(executor, tokenizer, stop_token_detector,
                     num_output_candidates, benchmark_info, std::nullopt,
-                    std::nullopt, std::nullopt);
+                    std::nullopt, std::nullopt, cancelled);
 }
 
 absl::Status DecodeStreaming(LlmExecutor& executor, Tokenizer& tokenizer,
                              const StopTokenDetector& stop_token_detector,
                              std::optional<BenchmarkInfo>& benchmark_info,
-                             InferenceObservable* observer) {
+                             InferenceObservable* observer,
+                             std::atomic<bool>* cancelled) {
   if (observer == nullptr) {
     return absl::InvalidArgumentError(
         "Observer must not be null for streaming.");
@@ -401,7 +411,7 @@ absl::Status DecodeStreaming(LlmExecutor& executor, Tokenizer& tokenizer,
   const int num_output_candidates = 1;
   return DecodeLoop(executor, tokenizer, stop_token_detector,
                     num_output_candidates, benchmark_info, std::nullopt,
-                    std::nullopt, observer)
+                    std::nullopt, observer, cancelled)
       .status();
 }
 
@@ -409,25 +419,26 @@ absl::StatusOr<Responses> DecodeCustomSampling(
     LlmExecutor& executor, Tokenizer& tokenizer,
     const StopTokenDetector& stop_token_detector, int num_output_candidates,
     Sampler& sampler, litert::TensorBuffer& decoded_ids,
-    std::optional<BenchmarkInfo>& benchmark_info) {
+    std::optional<BenchmarkInfo>& benchmark_info,
+    std::atomic<bool>* cancelled) {
   return DecodeLoop(executor, tokenizer, stop_token_detector,
                     num_output_candidates, benchmark_info, &sampler,
-                    &decoded_ids, std::nullopt);
+                    &decoded_ids, std::nullopt, cancelled);
 }
 
 absl::Status DecodeCustomSamplingStreaming(
     LlmExecutor& executor, Tokenizer& tokenizer,
     const StopTokenDetector& stop_token_detector, int num_output_candidates,
     Sampler& sampler, litert::TensorBuffer& decoded_ids,
-    std::optional<BenchmarkInfo>& benchmark_info,
-    InferenceObservable* observer) {
+    std::optional<BenchmarkInfo>& benchmark_info, InferenceObservable* observer,
+    std::atomic<bool>* cancelled) {
   if (observer == nullptr) {
     return absl::InvalidArgumentError(
         "Observer must not be null for streaming.");
   }
   return DecodeLoop(executor, tokenizer, stop_token_detector,
                     num_output_candidates, benchmark_info, &sampler,
-                    &decoded_ids, observer)
+                    &decoded_ids, observer, cancelled)
       .status();
 }
 

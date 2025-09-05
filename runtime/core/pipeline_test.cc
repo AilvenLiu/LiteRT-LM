@@ -14,6 +14,7 @@
 
 #include "runtime/core/pipeline.h"
 
+#include <atomic>
 #include <filesystem>  // NOLINT: Required for path manipulation.
 #include <limits>
 #include <memory>
@@ -27,6 +28,8 @@
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "absl/time/clock.h"  // from @com_google_absl
+#include "absl/time/time.h"  // from @com_google_absl
 #include "runtime/components/sentencepiece_tokenizer.h"
 #include "runtime/components/stop_token_detector.h"
 #include "runtime/components/tokenizer.h"
@@ -34,6 +37,7 @@
 #include "runtime/engine/io_types.h"
 #include "runtime/executor/fake_llm_executor.h"
 #include "runtime/executor/llm_executor_io_types.h"
+#include "runtime/framework/threadpool.h"
 #include "runtime/util/convert_tensor_buffer.h"
 #include "runtime/util/test_utils.h"  // NOLINT
 
@@ -57,7 +61,7 @@ class BytePairEncodingTokenizer : public Tokenizer {
 // events is received after OnError or OnDone.
 class TestObserver : public InferenceObservable {
  public:
-  explicit TestObserver(int num_candidates) : done_(false) {
+  explicit TestObserver(int num_candidates): done_(false) {
     responses_.resize(num_candidates);
   }
   void OnNext(const Responses& responses) override {
@@ -490,6 +494,51 @@ TEST_F(PipelineCustomSamplingTest, DecodeComplexStopTokenDetector) {
   // -inf.
   EXPECT_EQ(*(responses->GetScoreAt(1)),
             -std::numeric_limits<float>::infinity());
+}
+
+TEST_F(PipelineCustomSamplingTest,
+       DecodeCustomSamplingStreamingWithCancellation) {
+  std::vector<std::vector<int>> decode_tokens;
+  for (int i = 0; i < 100; ++i) {
+    decode_tokens.push_back({1, 1});
+  }
+  auto delayed_executor = std::make_unique<FakeLlmExecutor>(
+      /*vocab_size=*/2560, std::vector<std::vector<int>>{{2}}, decode_tokens,
+      /*batch_size=*/2);
+  delayed_executor->SetDecodeDelay(absl::Milliseconds(100));
+
+  auto sampler_or = TopPSampler::Create(/*k=*/1, /*p=*/0.5, /*temperature=*/1.0,
+                                        /*batch_size=*/2, /*seed=*/1);
+  EXPECT_TRUE(sampler_or.ok());
+  std::unique_ptr<TopPSampler> sampler = std::move(sampler_or.value());
+
+  auto decoded_ids = CreateTensorBuffer<int>({2, 1});
+  TestObserver observer(/*num_candidates=*/2);
+  std::optional<BenchmarkInfo> benchmark_info;
+
+  StopTokenDetector stop_token_detector(2);
+  EXPECT_OK(stop_token_detector.AddStopTokenSequence({0}));
+
+  std::atomic<bool> cancelled = false;
+
+  ThreadPool pool("test_pool", 1);
+  absl::StatusOr<Responses> responses;
+  ASSERT_OK(pool.Schedule([&]() {
+    responses = DecodeCustomSamplingStreaming(
+        *delayed_executor, *tokenizer_, stop_token_detector,
+        /*num_output_candidates=*/2, *sampler, *decoded_ids, benchmark_info,
+        &observer, &cancelled);
+  }));
+
+  // Wait for a short time to ensure the decoding has started.
+  absl::SleepFor(absl::Milliseconds(50));
+
+  // Cancel the decoding process.
+  cancelled = true;
+
+  EXPECT_OK(pool.WaitUntilDone(absl::Seconds(5)));
+  EXPECT_THAT(observer.GetStatus(),
+              testing::status::StatusIs(absl::StatusCode::kCancelled));
 }
 
 TEST_F(PipelineCustomSamplingTest, DecodeStopTokenAndBPEDetector) {
