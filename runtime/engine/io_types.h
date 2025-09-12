@@ -250,6 +250,12 @@ class BenchmarkInfo {
   const BenchmarkTurnData& GetDecodeTurn(int turn_index) const;
   double GetDecodeTokensPerSec(int turn_index) const;
 
+  // --- Gets the time to the first token ---
+  // Note that the first time to token doesn't include the time for
+  // initialization. It is the sum of the prefill time for the first turn and
+  // the time spent for decoding the first token.
+  double GetTimeToFirstToken() const;
+
  private:
   proto::BenchmarkParams benchmark_params_;
 

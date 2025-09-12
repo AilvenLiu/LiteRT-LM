@@ -420,6 +420,28 @@ TEST(BenchmarkInfoTests, AddTwoMarks) {
             absl::Milliseconds(100));
 }
 
+TEST(BenchmarkInfoTests, GetTimeToFirstTokenInvalid) {
+  BenchmarkInfo benchmark_info(GetBenchmarkParams());
+  EXPECT_OK(benchmark_info.TimePrefillTurnStart());
+  EXPECT_OK(benchmark_info.TimePrefillTurnEnd(100));
+  EXPECT_EQ(benchmark_info.GetTimeToFirstToken(), 0.0);
+}
+
+TEST(BenchmarkInfoTests, GetTimeToFirstTokenValid) {
+  BenchmarkInfo benchmark_info(GetBenchmarkParams());
+  // Simulating prefilling 100 tokens takes > 100ms.
+  EXPECT_OK(benchmark_info.TimePrefillTurnStart());
+  absl::SleepFor(absl::Milliseconds(100));
+  EXPECT_OK(benchmark_info.TimePrefillTurnEnd(100));
+  // Simulating decoding 50 tokens takes > 200ms.
+  EXPECT_OK(benchmark_info.TimeDecodeTurnStart());
+  absl::SleepFor(absl::Milliseconds(200));
+  EXPECT_OK(benchmark_info.TimeDecodeTurnEnd(50));
+
+  // The time to first token should be (larger than) 100ms + 200ms / 50 = 104ms.
+  EXPECT_GT(benchmark_info.GetTimeToFirstToken(), 0.104);
+}
+
 TEST(BenchmarkInfoTests, OperatorOutputWithData) {
   BenchmarkInfo benchmark_info(GetBenchmarkParams());
   EXPECT_OK(benchmark_info.TimeInitPhaseStart("Load Model"));
@@ -443,13 +465,15 @@ TEST(BenchmarkInfoTests, OperatorOutputWithData) {
     - Load Tokenizer: .* ms
     Total init time: .* ms
 --------------------------------------------------
-  Prefill Turns \(Total: 2\):
+  Time to first token: .* s
+--------------------------------------------------
+  Prefill Turns \(Total 2 turns\):
     Prefill Turn 1: Processed 100 tokens in .* duration.
       Prefill Speed: .* tokens/sec.
     Prefill Turn 2: Processed 200 tokens in .* duration.
       Prefill Speed: .* tokens/sec.
 --------------------------------------------------
-  Decode Turns \(Total: 1\):
+  Decode Turns \(Total 1 turns\):
     Decode Turn 1: Processed 100 tokens in .* duration.
       Decode Speed: .* tokens/sec.
 --------------------------------------------------

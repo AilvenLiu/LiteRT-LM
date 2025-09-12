@@ -251,6 +251,18 @@ double BenchmarkInfo::GetDecodeTokensPerSec(int turn_index) const {
   return static_cast<double>(turn.num_tokens) / turn_seconds;
 }
 
+double BenchmarkInfo::GetTimeToFirstToken() const {
+  if (prefill_turns_.empty() || decode_turns_.empty() ||
+      prefill_turns_[0].num_tokens == 0 || decode_turns_[0].num_tokens == 0) {
+    return 0.0;  // No valid data to calculate time to first token.
+  }
+  double first_decode_token_seconds = absl::ToDoubleSeconds(
+      decode_turns_[0].duration / decode_turns_[0].num_tokens);
+  double first_prefill_token_seconds =
+      absl::ToDoubleSeconds(prefill_turns_[0].duration);
+  return first_decode_token_seconds + first_prefill_token_seconds;
+}
+
 std::ostream& operator<<(std::ostream& os, const BenchmarkTurnData& data) {
   os << "Processed " << data.num_tokens << " tokens in " << data.duration
      << " duration." << std::endl;
@@ -275,8 +287,12 @@ std::ostream& operator<<(std::ostream& os, const BenchmarkInfo& info) {
   }
 
   os << "--------------------------------------------------" << std::endl;
-  os << "  Prefill Turns (Total: " << info.GetTotalPrefillTurns()
-     << "):" << std::endl;
+  os << "  Time to first token: " << info.GetTimeToFirstToken() << " s"
+     << std::endl;
+
+  os << "--------------------------------------------------" << std::endl;
+  os << "  Prefill Turns (Total " << info.GetTotalPrefillTurns()
+     << " turns):" << std::endl;
   if (info.GetTotalPrefillTurns() == 0) {
     os << "    No prefill turns recorded." << std::endl;
   } else {
@@ -289,8 +305,8 @@ std::ostream& operator<<(std::ostream& os, const BenchmarkInfo& info) {
   }
 
   os << "--------------------------------------------------" << std::endl;
-  os << "  Decode Turns (Total: " << info.GetTotalDecodeTurns()
-     << "):" << std::endl;
+  os << "  Decode Turns (Total " << info.GetTotalDecodeTurns()
+     << " turns):" << std::endl;
   if (info.GetTotalDecodeTurns() == 0) {
     os << "    No decode turns recorded." << std::endl;
   } else {
