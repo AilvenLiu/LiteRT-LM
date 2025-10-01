@@ -110,6 +110,9 @@ ABSL_FLAG(std::optional<std::vector<std::string>>, image_files, std::nullopt,
           "The path to the image files that to be used for vision modality.");
 ABSL_FLAG(std::optional<std::vector<std::string>>, audio_files, std::nullopt,
           "The path to the audio files that to be used for audio modality.");
+ABSL_FLAG(bool, gpu_madvise_original_shared_tensors, true,
+          "If true, the GPU backend will madvise the original shared tensors "
+          "after use.");
 
 namespace {
 
@@ -175,7 +178,8 @@ absl::Status MainHelper(int argc, char** argv) {
            "[--verify_magic_numbers=<true|false>] "
            "[--clear_kv_cache_before_prefill=<true|false>] "
            "[--num_logits_to_print_after_decode=<num_logits_to_print>]"
-           "[--score_target_text=<target_text>]";
+           "[--score_target_text=<target_text>]"
+           "[--gpu_madvise_original_shared_tensors=<true|false>]";
     return absl::InvalidArgumentError("No arguments provided.");
   }
 
@@ -214,6 +218,8 @@ absl::Status MainHelper(int argc, char** argv) {
   settings.num_logits_to_print_after_decode =
       absl::GetFlag(FLAGS_num_logits_to_print_after_decode);
   settings.score_target_text = absl::GetFlag(FLAGS_score_target_text);
+  settings.gpu_madvise_original_shared_tensors =
+      absl::GetFlag(FLAGS_gpu_madvise_original_shared_tensors);
 
   // Adjust max_num_tokens and prefill_batch_size if not set on benchmark mode.
   if (settings.benchmark && settings.benchmark_prefill_tokens > 0) {

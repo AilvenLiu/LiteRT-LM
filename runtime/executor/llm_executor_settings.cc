@@ -61,6 +61,8 @@ std::ostream& operator<<(std::ostream& os, const AdvancedSettings& settings) {
      << settings.clear_kv_cache_before_prefill << "\n";
   os << "num_logits_to_print_after_decode: "
      << settings.num_logits_to_print_after_decode << "\n";
+  os << "gpu_madvise_original_shared_tensors: "
+     << settings.gpu_madvise_original_shared_tensors << "\n";
   return os;
 }
 

@@ -143,7 +143,7 @@ class LlmLiteRtCompiledModelExecutor : public LlmExecutor {
         prefill_signature_map_(std::move(prefill_signature_map)),
         signatures_(signatures),
         output_batch_size_(batch_size),
-        weight_cache_path_(weight_cache_path),
+        weight_cache_path_(std::move(weight_cache_path)),
         embedding_lookup_(std::move(embedding_lookup)),
         per_layer_embedding_lookup_(std::move(per_layer_embedding_lookup)),
         logits_data_type_(logits_data_type) {}

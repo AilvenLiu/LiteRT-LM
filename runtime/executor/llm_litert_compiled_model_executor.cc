@@ -771,6 +771,11 @@ LlmLiteRtCompiledModelExecutor::Create(LlmExecutorSettings executor_settings,
           gpu_compilation_options.AddExternalTensorPattern("logits");
         }
       }
+      auto advanced_settings = executor_settings.GetAdvancedSettings();
+      if (advanced_settings) {
+        gpu_compilation_options.SetMadviseOriginalSharedTensors(
+            advanced_settings->gpu_madvise_original_shared_tensors);
+      }
       // TODO b/441627719 - Select backend by runtime options.
 #if defined(LITERT_USE_WEBGPU_ACCELERATOR)
       gpu_compilation_options.SetGpuBackend(kLiteRtGpuBackendWebGpu);
@@ -975,8 +980,9 @@ LlmLiteRtCompiledModelExecutor::Create(LlmExecutorSettings executor_settings,
       std::move(prefill_output_buffers), std::move(decode_input_buffers),
       std::move(decode_output_buffers), std::move(input_kv_cache_buffers),
       std::move(output_kv_cache_buffers), std::move(prefill_runner_set),
-      signatures, batch_size, weight_cache_path, std::move(embedding_lookup),
-      std::move(per_layer_embedding_lookup), activation_data_type));
+      signatures, batch_size, std::move(weight_cache_path),
+      std::move(embedding_lookup), std::move(per_layer_embedding_lookup),
+      activation_data_type));
 }
 
 }  // namespace litert::lm

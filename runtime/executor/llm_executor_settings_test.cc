@@ -218,6 +218,7 @@ TEST(LlmExecutorConfigTest, LlmExecutorSettingsWithAdvancedSettings) {
       .verify_magic_numbers = true,
       .clear_kv_cache_before_prefill = true,
       .num_logits_to_print_after_decode = 10,
+      .gpu_madvise_original_shared_tensors = true,
   });
 
   std::stringstream oss;
@@ -244,6 +245,7 @@ configure_magic_numbers: 1
 verify_magic_numbers: 1
 clear_kv_cache_before_prefill: 1
 num_logits_to_print_after_decode: 10
+gpu_madvise_original_shared_tensors: 1
 
 )";
   EXPECT_EQ(oss.str(), expected_output);

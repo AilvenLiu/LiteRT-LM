@@ -277,6 +277,8 @@ absl::Status RunLiteRtLm(const LiteRtLmSettings& settings) {
       .clear_kv_cache_before_prefill = settings.clear_kv_cache_before_prefill,
       .num_logits_to_print_after_decode =
           static_cast<uint32_t>(settings.num_logits_to_print_after_decode),
+      .gpu_madvise_original_shared_tensors =
+          settings.gpu_madvise_original_shared_tensors,
   };
   if (advanced_settings != AdvancedSettings()) {
     engine_settings.GetMutableMainExecutorSettings().SetAdvancedSettings(

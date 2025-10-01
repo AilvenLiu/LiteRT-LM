@@ -123,12 +123,20 @@ struct AdvancedSettings {
   // step. If 0, disables printing logits.
   uint32_t num_logits_to_print_after_decode = 0;
 
+  // If true, the GPU backend will madvise the original shared tensors after
+  // use.
+  bool gpu_madvise_original_shared_tensors = true;
+
   bool operator==(const AdvancedSettings& other) const {
     return prefill_batch_sizes == other.prefill_batch_sizes &&
+           configure_magic_numbers == other.configure_magic_numbers &&
+           verify_magic_numbers == other.verify_magic_numbers &&
            clear_kv_cache_before_prefill ==
                other.clear_kv_cache_before_prefill &&
            num_logits_to_print_after_decode ==
-               other.num_logits_to_print_after_decode;
+               other.num_logits_to_print_after_decode &&
+           gpu_madvise_original_shared_tensors ==
+               other.gpu_madvise_original_shared_tensors;
   }
 };
 std::ostream& operator<<(std::ostream& os, const AdvancedSettings& settings);
