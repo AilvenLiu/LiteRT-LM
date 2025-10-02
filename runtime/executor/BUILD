@@ -688,12 +688,18 @@ cc_library(
         ":llm_executor_settings",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/strings",
-        "@litert//litert/c:litert_environment_options",
-        "@litert//litert/cc:litert_environment",
-        "@litert//litert/cc:litert_expected",
-        "@litert//litert/cc:litert_macros",
-        "@litert//litert/cc:litert_model",
-    ],
+    ] + select({
+        "@litert//litert:litert_link_capi_so": [
+            "@litert//litert/cc:litert_api_with_dynamic_runtime",
+        ],
+        "//conditions:default": [
+            "@litert//litert/c:litert_environment_options",
+            "@litert//litert/cc:litert_environment",
+            "@litert//litert/cc:litert_expected",
+            "@litert//litert/cc:litert_macros",
+            "@litert//litert/cc:litert_model",
+        ],
+    }),
 )
 
 cc_test(
