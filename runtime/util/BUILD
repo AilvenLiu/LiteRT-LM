@@ -117,9 +117,8 @@ cc_test(
 
 cc_library(
     name = "litert_status_util",
-    srcs = ["litert_status_util.cc"],
+    srcs = [],
     hdrs = [
-        "litert_status_util.h",
         "status_macros.h",
     ],
     deps = [
@@ -128,20 +127,6 @@ cc_library(
         "@litert//litert/c:litert_common",
         "@litert//litert/cc:litert_expected",
         "@litert//litert/cc:litert_macros",
-    ],
-)
-
-cc_test(
-    name = "litert_status_util_test",
-    srcs = ["litert_status_util_test.cc"],
-    deps = [
-        ":litert_status_util",
-        ":test_utils",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@litert//litert/c:litert_common",
-        "@litert//litert/cc:litert_expected",
     ],
 )
 
