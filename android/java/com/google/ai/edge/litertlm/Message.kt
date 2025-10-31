@@ -15,10 +15,10 @@
  */
 package com.google.ai.edge.litertlm
 
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import org.json.JSONArray
-import org.json.JSONObject
 
 /** Represents a message in the conversation. A message can contain multiple [Content]. */
 class Message private constructor(val contents: List<Content>) {
@@ -27,11 +27,11 @@ class Message private constructor(val contents: List<Content>) {
     check(contents.isNotEmpty()) { "Contents should not be empty." }
   }
 
-  /** Convert to [JSONArray]. Used internally. */
-  internal fun toJson(): JSONArray {
-    return JSONArray().apply {
+  /** Convert to [JsonArray]. Used internally. */
+  internal fun toJson(): JsonArray {
+    return JsonArray().apply {
       for (content in contents) {
-        this.put(content.toJson())
+        this.add(content.toJson())
       }
     }
   }
@@ -56,43 +56,58 @@ class Message private constructor(val contents: List<Content>) {
 
 /** Represents a content in the [Message] of the conversation. */
 sealed class Content {
-  /** Convert to [JSONObject]. Used internally. */
-  internal abstract fun toJson(): JSONObject
+  /** Convert to [JsonObject]. Used internally. */
+  internal abstract fun toJson(): JsonObject
 
   /** Text. */
   data class Text(val text: String) : Content() {
-    override fun toJson(): JSONObject {
-      return JSONObject().put("type", "text").put("text", text)
+    override fun toJson(): JsonObject {
+      return JsonObject().apply {
+        addProperty("type", "text")
+        addProperty("text", text)
+      }
     }
   }
 
   /** Image provided as raw bytes. */
   @OptIn(ExperimentalEncodingApi::class)
   data class ImageBytes(val bytes: ByteArray) : Content() {
-    override fun toJson(): JSONObject {
-      return JSONObject().put("type", "image").put("blob", Base64.encode(bytes))
+    override fun toJson(): JsonObject {
+      return JsonObject().apply {
+        addProperty("type", "image")
+        addProperty("blob", Base64.encode(bytes))
+      }
     }
   }
 
   /** Image provided by a file. */
   data class ImageFile(val absolutePath: String) : Content() {
-    override fun toJson(): JSONObject {
-      return JSONObject().put("type", "image").put("path", absolutePath)
+    override fun toJson(): JsonObject {
+      return JsonObject().apply {
+        addProperty("type", "image")
+        addProperty("path", absolutePath)
+      }
     }
   }
 
   /** Audio provided as raw bytes. */
   @OptIn(ExperimentalEncodingApi::class)
   data class AudioBytes(val bytes: ByteArray) : Content() {
-    override fun toJson(): JSONObject {
-      return JSONObject().put("type", "audio").put("blob", Base64.encode(bytes))
+    override fun toJson(): JsonObject {
+      return JsonObject().apply {
+        addProperty("type", "audio")
+        addProperty("blob", Base64.encode(bytes))
+      }
     }
   }
 
   /** Audio provided by a file. */
   data class AudioFile(val absolutePath: String) : Content() {
-    override fun toJson(): JSONObject {
-      return JSONObject().put("type", "audio").put("path", absolutePath)
+    override fun toJson(): JsonObject {
+      return JsonObject().apply {
+        addProperty("type", "audio")
+        addProperty("path", absolutePath)
+      }
     }
   }
 }

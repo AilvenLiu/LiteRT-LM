@@ -163,6 +163,7 @@ maven_install(
     artifacts = [
         "com.google.flogger:flogger:0.9",
         "com.google.flogger:flogger-system-backend:0.9",
+        "com.google.code.gson:gson:2.13.2"
     ],
     repositories = [
         "https://maven.google.com",
