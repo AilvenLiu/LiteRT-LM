@@ -64,10 +64,9 @@ absl::StatusOr<std::vector<T>> GetDataAsVector(
 template <typename T>
 absl::StatusOr<TensorBuffer> CreateTensorBuffer(
     absl::Span<T> data, RankedTensorType ranked_tensor_type) {
-  LITERT_ASSIGN_OR_RETURN(
-      auto output,
-      TensorBuffer::CreateManaged(TensorBufferType::kHostMemory,
-                                  ranked_tensor_type, data.size() * sizeof(T)));
+  LITERT_ASSIGN_OR_RETURN(auto output,
+                          TensorBuffer::CreateManagedHostMemory(
+                              ranked_tensor_type, data.size() * sizeof(T)));
   LITERT_RETURN_IF_ERROR(output.template Write<T>(absl::MakeSpan(data)));
   return output;
 }
