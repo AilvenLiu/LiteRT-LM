@@ -336,6 +336,7 @@ http_archive(
 http_archive(
     name = "minja",
     build_file = "@//:BUILD.minja",
+    patches = ["@//:PATCH.minja"],
     sha256 = "752f47dd2a2f4920a66f497c952785073c1983f12f084b99e5c12bf89f96acfe",
     strip_prefix = "minja-58568621432715b0ed38efd16238b0e7ff36c3ba",
     urls = ["https://github.com/google/minja/archive/58568621432715b0ed38efd16238b0e7ff36c3ba.zip"],
