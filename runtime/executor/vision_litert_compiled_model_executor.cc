@@ -81,7 +81,6 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionEncoder::Initialize() {
 
       LITERT_ASSIGN_OR_RETURN(RuntimeOptions runtime_options,
                                    RuntimeOptions::Create());
-      runtime_options.SetShloCompositeInlining(true);
       options.AddOpaqueOptions(std::move(runtime_options));
       options.AddOpaqueOptions(std::move(cpu_compilation_options));
       options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);
@@ -177,7 +176,6 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionAdapter::Initialize() {
 
       LITERT_ASSIGN_OR_RETURN(RuntimeOptions runtime_options,
                                    RuntimeOptions::Create());
-      runtime_options.SetShloCompositeInlining(true);
       options.AddOpaqueOptions(std::move(runtime_options));
       options.AddOpaqueOptions(std::move(cpu_compilation_options));
       options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);

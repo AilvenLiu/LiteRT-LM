@@ -1203,7 +1203,6 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
           default_xnnpack_flags |
           TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
       LITERT_ASSIGN_OR_RETURN(auto runtime_options, RuntimeOptions::Create());
-      runtime_options.SetShloCompositeInlining(true);
       compilation_options.AddOpaqueOptions(std::move(runtime_options));
       compilation_options.AddOpaqueOptions(std::move(*cpu_compilation_options));
       compilation_options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);
@@ -1574,7 +1573,6 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
         default_xnnpack_flags |
         TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
     LITERT_ASSIGN_OR_RETURN(auto runtime_options, RuntimeOptions::Create());
-    runtime_options.SetShloCompositeInlining(true);
     compilation_options.AddOpaqueOptions(std::move(runtime_options));
     compilation_options.AddOpaqueOptions(std::move(*cpu_compilation_options));
     compilation_options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);
