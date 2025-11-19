@@ -34,12 +34,13 @@ object ExperimentalFlags {
   var enableBenchmark: Boolean = false
 
   /**
-   * Whether to force disabling conversation constrained decoding.
+   * Whether to enable conversation constrained decoding. This is primarily used for function
+   * calling.
    *
    * Note: This flag is read only when a new [Conversation] is created. Changing this value will not
    * affect any existing [Conversation] instances.
    */
-  var forceDisableConversationConstrainedDecoding: Boolean = false
+  var enableConversationConstrainedDecoding: Boolean = false
 
   /**
    * Whether to convert the function and parameter names in to snake case for tool calling.

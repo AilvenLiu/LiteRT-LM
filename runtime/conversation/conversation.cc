@@ -47,8 +47,8 @@ namespace litert::lm {
 absl::StatusOr<ConversationConfig> ConversationConfig::CreateDefault(
     const Engine& engine, std::optional<Preface> preface,
     std::optional<PromptTemplate> overwrite_prompt_template,
-    std::optional<DataProcessorConfig> overwrite_processor_config
-) {
+    std::optional<DataProcessorConfig> overwrite_processor_config,
+    bool enable_constrained_decoding) {
   SessionConfig session_config = SessionConfig::CreateDefault();
   if (overwrite_prompt_template.has_value()) {
     session_config.GetMutableJinjaPromptTemplate() =
@@ -58,15 +58,15 @@ absl::StatusOr<ConversationConfig> ConversationConfig::CreateDefault(
                       "default template from the model metadata.";
   }
   return CreateFromSessionConfig(engine, session_config, preface,
-                                 overwrite_processor_config
-  );
+                                 overwrite_processor_config,
+                                 enable_constrained_decoding);
 }
 
 absl::StatusOr<ConversationConfig> ConversationConfig::CreateFromSessionConfig(
     const Engine& engine, const SessionConfig& session_config,
     std::optional<Preface> preface,
-    std::optional<DataProcessorConfig> overwrite_processor_config
-) {
+    std::optional<DataProcessorConfig> overwrite_processor_config,
+    bool enable_constrained_decoding) {
   if (preface.has_value() && !std::holds_alternative<JsonPreface>(*preface)) {
     return absl::InvalidArgumentError("Only JsonPreface is supported for now.");
   }
@@ -96,8 +96,7 @@ absl::StatusOr<ConversationConfig> ConversationConfig::CreateFromSessionConfig(
   return ConversationConfig(
       session_config_copy, preface.value_or(JsonPreface()),
       PromptTemplate(session_config_copy.GetJinjaPromptTemplate()),
-      processor_config
-  );
+      processor_config, enable_constrained_decoding);
 }
 
 absl::StatusOr<std::string> Conversation::GetSingleTurnText(
@@ -182,8 +181,8 @@ absl::StatusOr<std::string> Conversation::GetSingleTurnText(
 absl::StatusOr<DecodeConfig> Conversation::CreateDecodeConfig() {
   auto decode_config = DecodeConfig::CreateDefault();
   // Create a constraint from the tools defined in the preface, if any.
-  if (
-      constraint_ == nullptr && std::holds_alternative<JsonPreface>(preface_)) {
+  if (config_.constrained_decoding_enabled() && constraint_ == nullptr &&
+      std::holds_alternative<JsonPreface>(preface_)) {
     auto json_preface = std::get<JsonPreface>(preface_);
     if (!json_preface.tools.is_null()) {
       auto constraint =
@@ -211,8 +210,7 @@ absl::StatusOr<std::unique_ptr<Conversation>> Conversation::Create(
       CreateModelDataProcessor(config.GetProcessorConfig(), config.GetPreface(),
                                &session->GetTokenizer(),
                                session->GetSessionConfig().GetStopTokenIds(),
-                               false
-                               ));
+                               config.constrained_decoding_enabled()));
 
   auto conversation = absl::WrapUnique(new Conversation(
       std::move(session), std::move(model_data_processor), config.GetPreface(),

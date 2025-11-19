@@ -57,12 +57,15 @@ class ConversationConfig {
   //     processor, if not provided, the default config for the model type's
   //     data processor will be used. Most of the time, the users don't need to
   //     provide the data processor config.
+  // - `enable_constrained_decoding`: Whether to enable constrained decoding. If
+  //     true, constrained decoding will be used, primarily for function
+  //     calling.
   static absl::StatusOr<ConversationConfig> CreateDefault(
       const Engine& engine, std::optional<Preface> preface = std::nullopt,
       std::optional<PromptTemplate> overwrite_prompt_template = std::nullopt,
       std::optional<DataProcessorConfig> overwrite_processor_config =
-          std::nullopt
-  );
+          std::nullopt,
+      bool enable_constrained_decoding = false);
 
   // Creates a ConversationConfig from the given SessionConfig.
   // Args:
@@ -77,12 +80,15 @@ class ConversationConfig {
   //     processor, if not provided, the default config for the model type's
   //     data processor will be used. Most of the time, the users don't need to
   //     provide the data processor config.
+  // - `enable_constrained_decoding`: Whether to enable constrained decoding. If
+  //     true, constrained decoding will be used, primarily for function
+  //     calling.
   static absl::StatusOr<ConversationConfig> CreateFromSessionConfig(
       const Engine& engine, const SessionConfig& session_config,
       std::optional<Preface> preface = std::nullopt,
       std::optional<DataProcessorConfig> overwrite_processor_config =
-          std::nullopt
-  );
+          std::nullopt,
+      bool enable_constrained_decoding = false);
 
   // Returns the SessionConfig used for creating the ConversationConfig.
   const SessionConfig& GetSessionConfig() const { return session_config_; }
@@ -98,21 +104,27 @@ class ConversationConfig {
     return processor_config_;
   }
 
+  // Returns whether constrained decoding is enabled.
+  bool constrained_decoding_enabled() const {
+    return constrained_decoding_enabled_;
+  }
+
  private:
   explicit ConversationConfig(SessionConfig session_config, Preface preface,
                               PromptTemplate prompt_template,
-                              DataProcessorConfig processor_config
-                              )
+                              DataProcessorConfig processor_config,
+                              bool constrained_decoding_enabled = false)
       : session_config_(std::move(session_config)),
         preface_(std::move(preface)),
         prompt_template_(std::move(prompt_template)),
-        processor_config_(std::move(processor_config))
-  {}
+        processor_config_(std::move(processor_config)),
+        constrained_decoding_enabled_(constrained_decoding_enabled) {}
 
   SessionConfig session_config_;
   Preface preface_;
   PromptTemplate prompt_template_;
   DataProcessorConfig processor_config_;
+  bool constrained_decoding_enabled_;
 };
 
 // A multi-turn centric stateful Conversation API for high-level user

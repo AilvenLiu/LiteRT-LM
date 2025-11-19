@@ -216,7 +216,7 @@ TEST(ConversationConfigTest, CreateFromSessionConfig) {
   EXPECT_OK(Conversation::Create(*engine, config));
 }
 
-class ConversationTest : public ::testing::Test {
+class ConversationTest : public testing::TestWithParam<bool> {
  protected:
   void SetUp() override {
     auto tokenizer = SentencePieceTokenizer::CreateFromFile(
@@ -227,9 +227,10 @@ class ConversationTest : public ::testing::Test {
   }
 
   std::unique_ptr<Tokenizer> tokenizer_;
+  bool enable_constrained_decoding_ = GetParam();
 };
 
-TEST_F(ConversationTest, SendMessage) {
+TEST_P(ConversationTest, SendMessage) {
   ASSERT_OK_AND_ASSIGN(auto model_assets,
                        ModelAssets::Create(GetTestdataPath(kTestLlmPath)));
   ASSERT_OK_AND_ASSIGN(auto engine_settings, EngineSettings::CreateDefault(
@@ -237,7 +238,13 @@ TEST_F(ConversationTest, SendMessage) {
   engine_settings.GetMutableMainExecutorSettings().SetCacheDir(":nocache");
   engine_settings.GetMutableMainExecutorSettings().SetMaxNumTokens(10);
   ASSERT_OK_AND_ASSIGN(auto engine, Engine::CreateEngine(engine_settings));
-  ASSERT_OK_AND_ASSIGN(auto config, ConversationConfig::CreateDefault(*engine));
+  ASSERT_OK_AND_ASSIGN(
+      auto config,
+      ConversationConfig::CreateDefault(
+          *engine, /*preface=*/std::nullopt,
+          /*overwrite_prompt_template=*/std::nullopt,
+          /*overwrite_processor_config=*/std::nullopt,
+          /*enable_constrained_decoding=*/enable_constrained_decoding_));
   ASSERT_OK_AND_ASSIGN(auto conversation,
                        Conversation::Create(*engine, config));
   EXPECT_THAT(conversation->GetHistory(), testing::IsEmpty());
@@ -257,7 +264,7 @@ TEST_F(ConversationTest, SendMessage) {
               testing::ElementsAre(user_message, expected_message));
 }
 
-TEST_F(ConversationTest, SendSingleMessage) {
+TEST_P(ConversationTest, SendSingleMessage) {
   // Set up mock Session.
   auto mock_session = std::make_unique<MockSession>();
   MockSession* mock_session_ptr = mock_session.get();
@@ -321,7 +328,7 @@ TEST_F(ConversationTest, SendSingleMessage) {
               testing::ElementsAre(user_message, assistant_message));
 }
 
-TEST_F(ConversationTest, SendMultipleMessages) {
+TEST_P(ConversationTest, SendMultipleMessages) {
   // Set up mock Session.
   auto mock_session = std::make_unique<MockSession>();
   MockSession* mock_session_ptr = mock_session.get();
@@ -347,9 +354,12 @@ TEST_F(ConversationTest, SendMultipleMessages) {
       .WillRepeatedly(testing::ReturnRef(engine_settings));
 
   // Create Conversation.
-  ASSERT_OK_AND_ASSIGN(auto conversation_config,
-                       ConversationConfig::CreateFromSessionConfig(
-                           *mock_engine, session_config));
+  ASSERT_OK_AND_ASSIGN(
+      auto conversation_config,
+      ConversationConfig::CreateFromSessionConfig(
+          *mock_engine, session_config, /*preface=*/std::nullopt,
+          /*overwrite_processor_config=*/std::nullopt,
+          /*enable_constrained_decoding=*/enable_constrained_decoding_));
   ASSERT_OK_AND_ASSIGN(auto conversation,
                        Conversation::Create(*mock_engine, conversation_config));
 
@@ -399,7 +409,7 @@ TEST_F(ConversationTest, SendMultipleMessages) {
                                    assistant_message));
 }
 
-TEST_F(ConversationTest, SendMultipleMessagesWithHistory) {
+TEST_P(ConversationTest, SendMultipleMessagesWithHistory) {
   // Set up mock Session.
   auto mock_session = std::make_unique<MockSession>();
   MockSession* mock_session_ptr = mock_session.get();
@@ -425,9 +435,12 @@ TEST_F(ConversationTest, SendMultipleMessagesWithHistory) {
       .WillRepeatedly(testing::ReturnRef(engine_settings));
 
   // Create Conversation.
-  ASSERT_OK_AND_ASSIGN(auto conversation_config,
-                       ConversationConfig::CreateFromSessionConfig(
-                           *mock_engine, session_config));
+  ASSERT_OK_AND_ASSIGN(
+      auto conversation_config,
+      ConversationConfig::CreateFromSessionConfig(
+          *mock_engine, session_config, /*preface=*/std::nullopt,
+          /*overwrite_processor_config=*/std::nullopt,
+          /*enable_constrained_decoding=*/enable_constrained_decoding_));
   ASSERT_OK_AND_ASSIGN(auto conversation,
                        Conversation::Create(*mock_engine, conversation_config));
 
@@ -506,7 +519,7 @@ TEST_F(ConversationTest, SendMultipleMessagesWithHistory) {
                                    assistant_message_2));
 }
 
-TEST_F(ConversationTest, SendMessageAsync) {
+TEST_P(ConversationTest, SendMessageAsync) {
   ASSERT_OK_AND_ASSIGN(auto model_assets,
                        ModelAssets::Create(GetTestdataPath(kTestLlmPath)));
   ASSERT_OK_AND_ASSIGN(auto engine_settings, EngineSettings::CreateDefault(
@@ -514,7 +527,13 @@ TEST_F(ConversationTest, SendMessageAsync) {
   engine_settings.GetMutableMainExecutorSettings().SetCacheDir(":nocache");
   engine_settings.GetMutableMainExecutorSettings().SetMaxNumTokens(10);
   ASSERT_OK_AND_ASSIGN(auto engine, Engine::CreateEngine(engine_settings));
-  ASSERT_OK_AND_ASSIGN(auto config, ConversationConfig::CreateDefault(*engine));
+  ASSERT_OK_AND_ASSIGN(
+      auto config,
+      ConversationConfig::CreateDefault(
+          *engine, /*preface=*/std::nullopt,
+          /*overwrite_prompt_template=*/std::nullopt,
+          /*overwrite_processor_config=*/std::nullopt,
+          /*enable_constrained_decoding=*/enable_constrained_decoding_));
   ASSERT_OK_AND_ASSIGN(auto conversation,
                        Conversation::Create(*engine, config));
 
@@ -538,7 +557,7 @@ TEST_F(ConversationTest, SendMessageAsync) {
               testing::ElementsAre(user_message, expected_message_for_confirm));
 }
 
-TEST_F(ConversationTest, SendSingleMessageAsync) {
+TEST_P(ConversationTest, SendSingleMessageAsync) {
   // Set up mock Session.
   auto mock_session = std::make_unique<MockSession>();
   MockSession* mock_session_ptr = mock_session.get();
@@ -612,7 +631,7 @@ TEST_F(ConversationTest, SendSingleMessageAsync) {
       testing::ElementsAre(user_message, assistant_message_for_confirm));
 }
 
-TEST_F(ConversationTest, SendMultipleMessagesAsync) {
+TEST_P(ConversationTest, SendMultipleMessagesAsync) {
   // Set up mock Session.
   auto mock_session = std::make_unique<MockSession>();
   MockSession* mock_session_ptr = mock_session.get();
@@ -638,9 +657,12 @@ TEST_F(ConversationTest, SendMultipleMessagesAsync) {
       .WillRepeatedly(testing::ReturnRef(engine_settings));
 
   // Create Conversation.
-  ASSERT_OK_AND_ASSIGN(auto conversation_config,
-                       ConversationConfig::CreateFromSessionConfig(
-                           *mock_engine, session_config));
+  ASSERT_OK_AND_ASSIGN(
+      auto conversation_config,
+      ConversationConfig::CreateFromSessionConfig(
+          *mock_engine, session_config, /*preface=*/std::nullopt,
+          /*overwrite_processor_config=*/std::nullopt,
+          /*enable_constrained_decoding=*/enable_constrained_decoding_));
   ASSERT_OK_AND_ASSIGN(auto conversation,
                        Conversation::Create(*mock_engine, conversation_config));
 
@@ -699,7 +721,7 @@ TEST_F(ConversationTest, SendMultipleMessagesAsync) {
                                    assistant_message_for_confirm));
 }
 
-TEST_F(ConversationTest, SendMultipleMessagesAsyncWithHistory) {
+TEST_P(ConversationTest, SendMultipleMessagesAsyncWithHistory) {
   // Set up mock Session.
   auto mock_session = std::make_unique<MockSession>();
   MockSession* mock_session_ptr = mock_session.get();
@@ -725,9 +747,12 @@ TEST_F(ConversationTest, SendMultipleMessagesAsyncWithHistory) {
       .WillRepeatedly(testing::ReturnRef(engine_settings));
 
   // Create Conversation.
-  ASSERT_OK_AND_ASSIGN(auto conversation_config,
-                       ConversationConfig::CreateFromSessionConfig(
-                           *mock_engine, session_config));
+  ASSERT_OK_AND_ASSIGN(
+      auto conversation_config,
+      ConversationConfig::CreateFromSessionConfig(
+          *mock_engine, session_config, /*preface=*/std::nullopt,
+          /*overwrite_processor_config=*/std::nullopt,
+          /*enable_constrained_decoding=*/enable_constrained_decoding_));
   ASSERT_OK_AND_ASSIGN(auto conversation,
                        Conversation::Create(*mock_engine, conversation_config));
 
@@ -827,7 +852,7 @@ TEST_F(ConversationTest, SendMultipleMessagesAsyncWithHistory) {
                            assistant_message_2_for_confirm));
 }
 
-TEST_F(ConversationTest, SendMessageWithPreface) {
+TEST_P(ConversationTest, SendMessageWithPreface) {
   ASSERT_OK_AND_ASSIGN(auto model_assets,
                        ModelAssets::Create(GetTestdataPath(kTestLlmPath)));
   ASSERT_OK_AND_ASSIGN(auto engine_settings, EngineSettings::CreateDefault(
@@ -842,7 +867,10 @@ TEST_F(ConversationTest, SendMessageWithPreface) {
           /*preface=*/
           JsonPreface{
               .messages = {{{"role", "system"},
-                            {"content", "You are a helpful assistant."}}}}));
+                            {"content", "You are a helpful assistant."}}}},
+          /*overwrite_prompt_template=*/std::nullopt,
+          /*overwrite_processor_config=*/std::nullopt,
+          /*enable_constrained_decoding=*/enable_constrained_decoding_));
   ASSERT_OK_AND_ASSIGN(auto conversation,
                        Conversation::Create(*engine, config));
   ASSERT_OK_AND_ASSIGN(const Message message,
@@ -859,7 +887,7 @@ TEST_F(ConversationTest, SendMessageWithPreface) {
   EXPECT_EQ(json_message, expected_message);
 }
 
-TEST_F(ConversationTest, GetBenchmarkInfo) {
+TEST_P(ConversationTest, GetBenchmarkInfo) {
   ASSERT_OK_AND_ASSIGN(auto model_assets,
                        ModelAssets::Create(GetTestdataPath(kTestLlmPath)));
   ASSERT_OK_AND_ASSIGN(auto engine_settings, EngineSettings::CreateDefault(
@@ -893,6 +921,9 @@ TEST_F(ConversationTest, GetBenchmarkInfo) {
                        conversation->GetBenchmarkInfo());
   EXPECT_EQ(benchmark_info_2.GetTotalPrefillTurns(), 2);
 }
+
+INSTANTIATE_TEST_SUITE_P(ConversationTest, ConversationTest, testing::Bool(),
+                         testing::PrintToStringParamName());
 
 absl::AnyInvocable<void(absl::StatusOr<Message>)>
 CreateCancelledMessageCallback(absl::Status& status, absl::Notification& done) {

@@ -113,7 +113,7 @@ class Engine(val engineConfig: EngineConfig) : AutoCloseable {
           conversationConfig.samplerConfig,
           conversationConfig.systemMessage?.toJson()?.toString() ?: "",
           toolManager.getToolsDescription().toString(),
-          ExperimentalFlags.forceDisableConversationConstrainedDecoding,
+          ExperimentalFlags.enableConversationConstrainedDecoding,
         ),
         toolManager,
       )

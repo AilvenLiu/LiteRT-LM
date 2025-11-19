@@ -155,6 +155,8 @@ internal object LiteRtLmJni {
    * @param systemMessageJsonString The system instruction to be used in the conversation.
    * @param toolsDescriptionJsonString A json string of a list of tool definitions (Open API json).
    *   could be used.
+   * @param enableConversationConstrainedDecoding Whether to enable conversation constrained
+   *   decoding.
    * @return A pointer to the native conversation instance.
    */
   external fun nativeCreateConversation(
@@ -162,7 +164,7 @@ internal object LiteRtLmJni {
     samplerConfig: SamplerConfig?,
     systemMessageJsonString: String,
     toolsDescriptionJsonString: String,
-    forceDisableConversationConstraintDecoding: Boolean,
+    enableConversationConstrainedDecoding: Boolean,
   ): Long
 
   /**
