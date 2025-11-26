@@ -402,6 +402,7 @@ TEST(EngineCTest, ConversationSendMessageWithConfig) {
 
   // 2. Create Sampler Params.
   LiteRtLmSamplerParams sampler_params;
+  sampler_params.type = kTopP;
   sampler_params.top_k = 10;
   sampler_params.top_p = 0.5f;
   sampler_params.temperature = 0.1f;
