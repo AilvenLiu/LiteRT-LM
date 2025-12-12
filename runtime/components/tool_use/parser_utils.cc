@@ -103,6 +103,7 @@ absl::StatusOr<nlohmann::ordered_json> ParseTextAndToolCalls(
 
   std::string text;
   std::string code_block;
+  absl::string_view original_response_str = response_str;
   while (RE2::Consume(&response_str, regex, &text, &code_block)) {
     // Append text to the content array.
     if (!text.empty()) {
@@ -131,9 +132,10 @@ absl::StatusOr<nlohmann::ordered_json> ParseTextAndToolCalls(
             "Unsupported syntax type: ", static_cast<int>(syntax_type)));
       }
       if (!tool_calls.ok()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("Failed to parse tool calls from: ", response_str,
-                         " with error: ", tool_calls.status().message()));
+        return absl::InvalidArgumentError(absl::StrCat(
+            "Failed to parse tool calls from response: ", original_response_str,
+            "code block: ", code_block,
+            " with error: ", tool_calls.status().message()));
       }
       for (const auto& tool_call : *tool_calls) {
         result["tool_calls"].push_back(
