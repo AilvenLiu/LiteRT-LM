@@ -8,12 +8,13 @@ options {
 main: expr EOF;
 expr: functionCall+ | functionCallList;
 
+key: STRING;
 value: INT | FLOAT | BOOL | STRING | NONE | list | dict | object;
 
 list: LIST_OPEN (value (SEP value)*)? SEP? LIST_CLOSE;
 
 dict
-  : OPEN_BRACE (STRING COLON value (SEP STRING COLON value)*)? CLOSE_BRACE
+  : OPEN_BRACE (key COLON value (SEP key COLON value)*)? CLOSE_BRACE
   ;
 
 argVal: NAME EQ value;

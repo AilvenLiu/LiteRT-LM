@@ -106,12 +106,13 @@ absl::StatusOr<nlohmann::ordered_json> ParsePythonDict(
   if (dict == nullptr) {
     return dict_json;
   }
-  const auto& keys = dict->STRING();
+  const auto& keys = dict->key();
   const auto& values = dict->value();
   const size_t num_pairs = std::min(keys.size(), values.size());
 
   for (size_t i = 0; i < num_pairs; ++i) {
-    antlr4::tree::TerminalNode* key_node = keys[i];
+    antlr_python_tool_call_parser::AntlrPythonParser::KeyContext* key_node =
+        keys[i];
     antlr_python_tool_call_parser::AntlrPythonParser::ValueContext* value_ctx =
         values[i];
 
