@@ -14,9 +14,36 @@
 
 # [Google-internal load of `cc_binary`]
 # [Google-internal load of `cc_library`]
+# [Google-internal load of `cc_test`]
 
 package(
     default_visibility = ["//kotlin:__subpackages__"],
+)
+
+cc_library(
+    name = "image_preprocessing",
+    srcs = ["image_preprocessing.cc"],
+    hdrs = ["image_preprocessing.h"],
+    deps = [
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/status:statusor",
+        "@litert//litert/cc:litert_layout",
+        "//runtime/components/preprocessor:image_preprocessor",
+        "//runtime/components/preprocessor:stb_image_preprocessor",
+        "//runtime/engine:io_types",
+    ],
+)
+
+cc_test(
+    name = "image_preprocessing_test",
+    srcs = ["image_preprocessing_test.cc"],
+    deps = [
+        ":image_preprocessing",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/status",
+        "@litert//litert/cc:litert_tensor_buffer",
+        "//runtime/engine:io_types",
+    ],
 )
 
 cc_binary(
@@ -24,6 +51,7 @@ cc_binary(
     srcs = ["litertlm.cc"],
     linkshared = 1,
     deps = [
+        ":image_preprocessing",
         "@com_google_absl//absl/base:log_severity",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/log:absl_log",
@@ -32,6 +60,9 @@ cc_binary(
         "@com_google_absl//absl/status:statusor",
         "@nlohmann_json//:json",
         "@litert//litert/c/internal:litert_logging",
+        "@litert//litert/cc:litert_layout",
+        "//runtime/components/preprocessor:image_preprocessor",
+        "//runtime/components/preprocessor:stb_image_preprocessor",
         "//runtime/conversation",
         "//runtime/conversation:io_types",
         "//runtime/engine:engine_factory",

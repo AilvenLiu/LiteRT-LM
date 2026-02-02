@@ -30,6 +30,8 @@
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "nlohmann/json_fwd.hpp"  // from @nlohmann_json
 #include "litert/c/internal/litert_logging.h"  // from @litert
+#include "litert/cc/litert_layout.h"  // from @litert
+#include "third_party/odml/litert_lm/kotlin/java/com/google/ai/edge/litertlm/jni/image_preprocessing.h"
 #include "runtime/conversation/conversation.h"
 #include "runtime/conversation/io_types.h"
 #include "runtime/engine/engine.h"
@@ -57,6 +59,7 @@
   Java_com_google_ai_edge_litertlm_LiteRtLmJni_##METHOD_NAME
 
 namespace {
+using litert::Dimensions;
 using litert::lm::Backend;
 using litert::lm::Conversation;
 using litert::lm::ConversationConfig;
@@ -206,12 +209,24 @@ std::vector<InputData> GetNativeInputData(JNIEnv* env,
           (jbyteArray)env->CallObjectMethod(input_obj, image_get_bytes_mid);
       jsize len = env->GetArrayLength(bytes_jarr);
       jbyte* bytes = env->GetByteArrayElements(bytes_jarr, nullptr);
-      contents.emplace_back(
-          InputImage(std::string(reinterpret_cast<char*>(bytes), len)));
+      InputImage input_image(std::string(reinterpret_cast<char*>(bytes), len));
+      absl::StatusOr<InputImage> processed_image =
+          litert::lm::jni::PreprocessImage(input_image);
+      if (!processed_image.ok()) {
+        ThrowLiteRtLmJniException(env, "Failed to preprocess image: " +
+                                           processed_image.status().ToString());
+        env->ReleaseByteArrayElements(bytes_jarr, bytes, JNI_ABORT);
+        env->DeleteLocalRef(bytes_jarr);
+        env->DeleteLocalRef(input_obj);
+        return contents;
+      }
+      contents.emplace_back(std::move(*processed_image));
       env->ReleaseByteArrayElements(bytes_jarr, bytes, JNI_ABORT);
       env->DeleteLocalRef(bytes_jarr);
     } else {
       ThrowLiteRtLmJniException(env, "Unsupported InputData type");
+      env->DeleteLocalRef(input_obj);
+      return contents;
     }
     env->DeleteLocalRef(input_obj);
   }
@@ -545,6 +560,9 @@ JNI_METHOD(nativeCreateSession)(JNIEnv* env, jclass thiz, jlong engine_pointer,
     session_config.GetMutableSamplerParams() =
         CreateSamplerParamsFromJni(env, sampler_config_obj);
   }
+
+  // Disable prompt template in the session.
+  session_config.SetApplyPromptTemplateInSession(false);
 
   Engine* engine = reinterpret_cast<Engine*>(engine_pointer);
   auto session = engine->CreateSession(session_config);
