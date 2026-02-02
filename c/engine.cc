@@ -304,35 +304,6 @@ void litert_lm_engine_settings_set_max_num_tokens(
   }
 }
 
-void litert_lm_engine_settings_set_cache_dir(LiteRtLmEngineSettings* settings,
-                                             const char* cache_dir) {
-  if (settings && settings->settings) {
-    settings->settings->GetMutableMainExecutorSettings().SetCacheDir(cache_dir);
-  }
-}
-
-void litert_lm_engine_settings_enable_benchmark(
-    LiteRtLmEngineSettings* settings) {
-  if (settings && settings->settings) {
-    settings->settings->GetMutableBenchmarkParams();
-  }
-}
-
-void litert_lm_engine_settings_set_activation_data_type(
-    LiteRtLmEngineSettings* settings, int activation_data_type_int) {
-  if (settings && settings->settings) {
-    settings->settings->GetMutableMainExecutorSettings().SetActivationDataType(
-        static_cast<litert::lm::ActivationDataType>(activation_data_type_int));
-  }
-}
-
-LiteRtLmEngine* litert_lm_engine_create(
-    const LiteRtLmEngineSettings* settings) {
-  if (!settings || !settings->settings) {
-    return nullptr;
-  }
-
-  absl::StatusOr<std::unique_ptr<Engine>> engine;
     engine = EngineFactory::CreateDefault(*settings->settings);
 
 
