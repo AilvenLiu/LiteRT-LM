@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -42,6 +43,11 @@ struct ElementTypeFor {
 // Here is the list of supported element types effectively. Support only minimal
 // types for now to avoid compatibility issues, e.g. whether or not uint8 is
 // compatible with int8.
+template <>
+struct ElementTypeFor<bool> {
+  static constexpr ::litert::ElementType kType = ::litert::ElementType::Bool;
+};
+
 template <>
 struct ElementTypeFor<int8_t> {
   static constexpr ::litert::ElementType kType = ::litert::ElementType::Int8;
@@ -79,7 +85,7 @@ template <typename T>
   }
 
   return ::litert::TensorBuffer::CreateManagedHostMemory(
-      ::litert::RankedTensorType(ElementTypeFor<T>::kType,
+      ::litert::RankedTensorType(ElementTypeFor<std::remove_const_t<T>>::kType,
                                  ::litert::Layout(std::move(dimensions))),
       size * sizeof(T));
 }
@@ -96,7 +102,7 @@ template <typename T>
 
   return ::litert::TensorBuffer::CreateManaged(
       env, buffer_type,
-      ::litert::RankedTensorType(ElementTypeFor<T>::kType,
+      ::litert::RankedTensorType(ElementTypeFor<std::remove_const_t<T>>::kType,
                                  ::litert::Layout(std::move(dimensions))),
       size * sizeof(T));
 }
@@ -106,7 +112,8 @@ template <typename T>
 ::litert::Expected<std::vector<T>> CopyFromTensorBuffer(
     const ::litert::TensorBuffer& tensor_buffer) {
   if (auto type = tensor_buffer.TensorType();
-      !type.HasValue() || type->ElementType() != ElementTypeFor<T>::kType) {
+      !type.HasValue() ||
+      type->ElementType() != ElementTypeFor<std::remove_const_t<T>>::kType) {
     return ::litert::Unexpected(
         ::litert::Status::kErrorInvalidArgument,
         "Element type is not compatible to the target type.");
@@ -131,7 +138,8 @@ template <typename T>
 ::litert::Expected<std::vector<std::vector<T>>> CopyFromTensorBuffer2D(
     const ::litert::TensorBuffer& tensor_buffer) {
   auto type = tensor_buffer.TensorType();
-  if (!type.HasValue() || type->ElementType() != ElementTypeFor<T>::kType) {
+  if (!type.HasValue() ||
+      type->ElementType() != ElementTypeFor<std::remove_const_t<T>>::kType) {
     return ::litert::Unexpected(
         ::litert::Status::kErrorInvalidArgument,
         "Element type is not compatible to the target type.");
@@ -175,14 +183,16 @@ template <typename T>
   ::litert::Expected<::litert::TensorBuffer> output_tensor_buffer;
   if (buffer_type == ::litert::TensorBufferType::kHostMemory) {
     output_tensor_buffer = ::litert::TensorBuffer::CreateManagedHostMemory(
-        ::litert::RankedTensorType(ElementTypeFor<T>::kType,
-                                   ::litert::Layout(std::move(dimensions))),
+        ::litert::RankedTensorType(
+            ElementTypeFor<std::remove_const_t<T>>::kType,
+            ::litert::Layout(std::move(dimensions))),
         data.size() * sizeof(T));
   } else {
     output_tensor_buffer = ::litert::TensorBuffer::CreateManaged(
         *env, buffer_type,
-        ::litert::RankedTensorType(ElementTypeFor<T>::kType,
-                                   ::litert::Layout(std::move(dimensions))),
+        ::litert::RankedTensorType(
+            ElementTypeFor<std::remove_const_t<T>>::kType,
+            ::litert::Layout(std::move(dimensions))),
         data.size() * sizeof(T));
   }
   if (!output_tensor_buffer.HasValue()) {
@@ -208,14 +218,16 @@ template <typename TargetType, typename SourceType>
   ::litert::Expected<::litert::TensorBuffer> tensor_buffer;
   if (buffer_type == ::litert::TensorBufferType::kHostMemory) {
     tensor_buffer = ::litert::TensorBuffer::CreateManagedHostMemory(
-        ::litert::RankedTensorType(ElementTypeFor<TargetType>::kType,
-                                   ::litert::Layout(std::move(dimensions))),
+        ::litert::RankedTensorType(
+            ElementTypeFor<std::remove_const_t<TargetType>>::kType,
+            ::litert::Layout(std::move(dimensions))),
         source.size() * sizeof(TargetType));
   } else {
     tensor_buffer = ::litert::TensorBuffer::CreateManaged(
         *env, buffer_type,
-        ::litert::RankedTensorType(ElementTypeFor<TargetType>::kType,
-                                   ::litert::Layout(std::move(dimensions))),
+        ::litert::RankedTensorType(
+            ElementTypeFor<std::remove_const_t<TargetType>>::kType,
+            ::litert::Layout(std::move(dimensions))),
         source.size() * sizeof(TargetType));
   }
   if (!tensor_buffer.HasValue()) {
@@ -246,7 +258,8 @@ template <typename T>
   }
 
   auto type = tensor_buffer.TensorType();
-  if (!type.HasValue() || type->ElementType() != ElementTypeFor<T>::kType) {
+  if (!type.HasValue() ||
+      type->ElementType() != ElementTypeFor<std::remove_const_t<T>>::kType) {
     return ::litert::Unexpected(
         ::litert::Status::kErrorInvalidArgument,
         "Element type is not compatible to the target type.");
@@ -283,7 +296,8 @@ template <typename T>
     int dimension = 0, int init_tokens_to_retain = 0,
     bool reset_remainder_to_zero = true) {
   auto type = tensor_buffer.TensorType();
-  if (!type.HasValue() || type->ElementType() != ElementTypeFor<T>::kType) {
+  if (!type.HasValue() ||
+      type->ElementType() != ElementTypeFor<std::remove_const_t<T>>::kType) {
     return ::litert::Unexpected(
         ::litert::Status::kErrorInvalidArgument,
         "Element type is not compatible to the target type.");
