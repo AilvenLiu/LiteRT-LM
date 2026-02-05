@@ -58,14 +58,13 @@ class EngineFactory {
   // The type of engine to create.
   enum class EngineType {
     kAdvancedLiteRTCompiledModel,
-    kLiteRTCompiledModel,
   };
 
   // Returns the string representation of the engine type.
   static std::string EngineTypeToString(EngineType engine_type) {
     switch (engine_type) {
-      case EngineType::kLiteRTCompiledModel:
-        return "kLiteRTCompiledModel";
+      case EngineType::kAdvancedLiteRTCompiledModel:
+        return "kAdvancedLiteRTCompiledModel";
       default:
         return "Unknown";
     }
@@ -74,7 +73,7 @@ class EngineFactory {
   // Creates a default Engine instance of type kLiteRTCompiledModel.
   static absl::StatusOr<std::unique_ptr<Engine>> CreateDefault(
       EngineSettings settings, absl::string_view input_prompt_as_hint = "") {
-    return Create(EngineType::kLiteRTCompiledModel, std::move(settings),
+    return Create(EngineType::kAdvancedLiteRTCompiledModel, std::move(settings),
                   input_prompt_as_hint);
   }
 

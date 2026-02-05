@@ -51,7 +51,7 @@ cc_library(
         "@litert//litert/c/internal:litert_logging",
         "//runtime/conversation",
         "//runtime/conversation:io_types",
-        "//runtime/core:engine_impl",
+        "//runtime/core:engine_advanced_impl",
         "//runtime/engine:engine_factory",
         "//runtime/engine:engine_interface",
         "//runtime/engine:engine_settings",

@@ -70,8 +70,10 @@ ENGINE_IMPL_COMMON_DEPS = [
     "//runtime/executor:llm_litert_compiled_model_executor",
     "//runtime/executor:magic_number_configs_helper",
     "//runtime/executor:vision_executor",
+    "//runtime/executor:vision_executor_settings",
     "//runtime/executor:vision_litert_compiled_model_executor",
     "//runtime/framework:threadpool",
+    "//runtime/framework/resource_management:execution_manager",
     "//runtime/proto:llm_metadata_cc_proto",
     "//runtime/proto:sampler_params_cc_proto",
     "//runtime/executor:llm_litert_compiled_model_executor_factory",
@@ -87,8 +89,8 @@ ENGINE_IMPL_COMMON_DEPS = [
 })
 
 cc_library(
-    name = "engine_impl",
-    srcs = ["engine_impl.cc"],
+    name = "engine_advanced_impl",
+    srcs = ["engine_advanced_impl.cc"],
     visibility = [":engine_impl_users"],
     deps = ENGINE_IMPL_COMMON_DEPS + [
         "//runtime/components:default_static_gpu_samplers",
@@ -100,21 +102,20 @@ cc_library(
 )
 
 cc_library(
-    name = "engine_impl_cpu_only",
-    srcs = ["engine_impl.cc"],
+    name = "engine_advanced_impl_cpu_only",
+    srcs = ["engine_advanced_impl.cc"],
     deps = ENGINE_IMPL_COMMON_DEPS,
     alwayslink = 1,
 )
 
 cc_test(
-    name = "engine_impl_test",
-    srcs = ["engine_impl_test.cc"],
-    # The LiteRT GPU path is not ready yet. Only test the CPU path.
-    args = ["--gunit_filter=-EngineTest.CreateEngineGPU*"],
+    name = "engine_advanced_impl_test",
+    srcs = ["engine_advanced_impl_test.cc"],
     data = ["//runtime/testdata"],
-    tags = ["requires-mac-inputs:hard"],  # Required for running on Forge on Mac.
+    defines = ["ENGINE_ADVANCED"],
+    tags = ["requires-mac-inputs:hard"],
     deps = [
-        ":engine_impl",  # buildcleaner: keep
+        ":engine_advanced_impl",  # buildcleaner: keep
         "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/log:absl_check",
@@ -128,6 +129,7 @@ cc_test(
         "//runtime/executor:executor_settings_base",
         "//runtime/executor:llm_executor_settings",
         "//runtime/proto:sampler_params_cc_proto",
+        "//runtime/util:litert_status_util",
         "//runtime/util:scoped_file",
         "//runtime/util:test_utils",
     ],
