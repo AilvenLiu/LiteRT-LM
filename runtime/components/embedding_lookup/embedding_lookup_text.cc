@@ -257,12 +257,12 @@ absl::Status EmbeddingLookupText::Initialize() {
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
                           litert::CompiledModel::Create(env_, model_, options));
-  LITERT_ASSIGN_OR_RETURN(auto signatures, model_.GetSignatures());
+  LITERT_ASSIGN_OR_RETURN(auto& signatures, model_.GetSignatures());
 
   if (signature_key_.has_value()) {
     bool found = false;
     for (const auto& signature : signatures) {
-      if (signature.Key() == signature_key_.value()) {
+      if (signature->Key() == signature_key_.value()) {
         found = true;
         break;
       }
@@ -280,9 +280,9 @@ absl::Status EmbeddingLookupText::Initialize() {
                                "have exactly one signature but got ",
                                signatures.size())
                         << ". Using the first signature: "
-                        << signatures.front().Key();
+                        << signatures.front()->Key();
     }
-    signature_key_ = signatures.front().Key();
+    signature_key_ = signatures.front()->Key();
   }
 
   LITERT_ASSIGN_OR_RETURN(input_buffers_, compiled_model_->CreateInputBuffers(

@@ -1291,20 +1291,16 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::SetCurrentStep(int new_step) {
   }
 
   int max_step = old_step;
-  RET_CHECK_LE(new_step, max_step)
-          .SetCode(absl::StatusCode::kInvalidArgument)
-      << "New step cannot be greater than the max step: "
-      << max_step;
+  RET_CHECK_LE(new_step, max_step).SetCode(absl::StatusCode::kInvalidArgument)
+      << "New step cannot be greater than the max step: " << max_step;
   RET_CHECK_GE(new_step, 0).SetCode(absl::StatusCode::kInvalidArgument)
       << "New step cannot be negative.";
   if (new_step == max_step) {
     llm_context_->runtime_state().current_step = new_step;
     return absl::OkStatus();
   }
-  RET_CHECK_LE(new_step, max_step)
-          .SetCode(absl::StatusCode::kInvalidArgument)
-      << "New step cannot be greater than the max step: "
-      << max_step;
+  RET_CHECK_LE(new_step, max_step).SetCode(absl::StatusCode::kInvalidArgument)
+      << "New step cannot be greater than the max step: " << max_step;
   if (new_step < 0) {
     // Current step is negative after rolling back. This can only happen when
     // the user wants to set the step to 0 while there is a pending input token.
@@ -1429,21 +1425,21 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
 
   absl::string_view prefill_signature_key = "";
   for (int i = 0; i < litert_model->GetNumSignatures(); ++i) {
-    LITERT_ASSIGN_OR_RETURN(auto sig, litert_model->GetSignature(i));
+    LITERT_ASSIGN_OR_RETURN(auto& sig, litert_model->GetSignature(i));
     absl::string_view key = sig.Key();
     if (absl::StartsWith(key, kPrefillSignatureRunner)) {
       prefill_signature_key = key;
       break;
     }
   }
-  LITERT_ASSIGN_OR_RETURN(auto prefill_signature,
+  LITERT_ASSIGN_OR_RETURN(auto& prefill_signature,
                           litert_model->FindSignature(prefill_signature_key));
   std::string kv_cache_k_root_name;
   std::string kv_cache_v_root_name;
   RETURN_IF_ERROR(GetKVCacheRootNames(
       prefill_signature.InputNames(), prefill_signature.OutputNames(),
       kv_cache_k_root_name, kv_cache_v_root_name));
-  LITERT_ASSIGN_OR_RETURN(auto decode_signature,
+  LITERT_ASSIGN_OR_RETURN(auto& decode_signature,
                           litert_model->FindSignature(kDecodeSignatureRunner));
   ASSIGN_OR_RETURN(
       ModelSignatures signatures,
@@ -1565,9 +1561,9 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       // previous step.
       gpu_compilation_options.SetNumStepsOfCommandBufferPreparations(2);
       gpu_compilation_options.SetNumThreadsToUpload(
-        advanced_settings.num_threads_to_upload >= 0
-            ? advanced_settings.num_threads_to_upload
-            : kDefaultNumThreadsToUpload);
+          advanced_settings.num_threads_to_upload >= 0
+              ? advanced_settings.num_threads_to_upload
+              : kDefaultNumThreadsToUpload);
       gpu_compilation_options.SetNumThreadsToCompile(
           advanced_settings.num_threads_to_compile >= 0
               ? advanced_settings.num_threads_to_compile
@@ -1604,7 +1600,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
           default_xnnpack_flags |
           TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
       LITERT_ASSIGN_OR_RETURN(auto& runtime_options,
-                             compilation_options.GetRuntimeOptions());
+                              compilation_options.GetRuntimeOptions());
       runtime_options.SetCompressQuantizationZeroPoints(true);
       compilation_options.SetHardwareAccelerators(HwAccelerators::kCpu);
       break;
@@ -2015,7 +2011,7 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
   absl::flat_hash_map<absl::string_view, TensorBuffer> decode_input_buffers;
   absl::flat_hash_map<absl::string_view, TensorBuffer> decode_output_buffers;
 
-  LITERT_ASSIGN_OR_RETURN(auto decode_signature,
+  LITERT_ASSIGN_OR_RETURN(auto& decode_signature,
                           litert_model->FindSignature(kDecodeSignatureRunner));
   std::string kv_cache_k_root_name;
   std::string kv_cache_v_root_name;

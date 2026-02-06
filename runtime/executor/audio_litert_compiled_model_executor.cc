@@ -143,14 +143,14 @@ AudioLiteRtCompiledModelExecutor::AudioStaticEncoder::Initialize() {
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
                           CompiledModel::Create(env_, model_, options));
-  LITERT_ASSIGN_OR_RETURN(auto signatures, model_.GetSignatures());
+  LITERT_ASSIGN_OR_RETURN(auto& signatures, model_.GetSignatures());
   if (signatures.size() != 1) {
     return absl::InvalidArgumentError(
         absl::StrCat("The Audio Static Encoder model must have exactly one "
                      "signature but got ",
                      signatures.size()));
   }
-  LITERT_ASSIGN_OR_RETURN(auto signature, model_.GetSignature(0));
+  LITERT_ASSIGN_OR_RETURN(auto& signature, model_.GetSignature(0));
 
   // Initialize the input buffers.
   LITERT_ASSIGN_OR_RETURN(auto input_buffers,
@@ -256,14 +256,14 @@ AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::Initialize() {
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
                           CompiledModel::Create(env_, model_, options));
-  LITERT_ASSIGN_OR_RETURN(auto signatures, model_.GetSignatures());
+  LITERT_ASSIGN_OR_RETURN(auto& signatures, model_.GetSignatures());
   if (signatures.size() != 1) {
     return absl::InvalidArgumentError(absl::StrCat(
         "The Audio Encoder model must have exactly one signature but got ",
         signatures.size()));
   }
 
-  LITERT_ASSIGN_OR_RETURN(auto signature, model_.GetSignature(0));
+  LITERT_ASSIGN_OR_RETURN(auto& signature, model_.GetSignature(0));
 
   // Initialize the input buffers.
   LITERT_ASSIGN_OR_RETURN(auto input_buffers,
@@ -426,7 +426,7 @@ absl::Status AudioLiteRtCompiledModelExecutor::AudioAdapter::Initialize() {
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
                           CompiledModel::Create(env_, model_, options));
-  LITERT_ASSIGN_OR_RETURN(auto signatures, model_.GetSignatures());
+  LITERT_ASSIGN_OR_RETURN(auto& signatures, model_.GetSignatures());
   if (signatures.size() != 1) {
     return absl::InvalidArgumentError(absl::StrCat(
         "The Audio Adapter model must have exactly one signature but got ",
@@ -450,7 +450,7 @@ absl::Status AudioLiteRtCompiledModelExecutor::AudioAdapter::Initialize() {
                      output_buffers_.size()));
   }
 
-  LITERT_ASSIGN_OR_RETURN(auto signature, model_.GetSignature(0));
+  LITERT_ASSIGN_OR_RETURN(auto& signature, model_.GetSignature(0));
   for (int i = 0; i < signature.InputNames().size(); ++i) {
     if (absl::StrContains(signature.InputNames()[i], kFeaturesName)) {
       features_buffer_ = &input_buffers_[i];
@@ -485,7 +485,7 @@ AudioLiteRtCompiledModelExecutor::Create(
   ASSIGN_OR_RETURN(auto audio_adapter_model,
                    resources->GetTFLiteModel(ModelType::kTfLiteAudioAdapter));
   std::unique_ptr<AudioEncoder> audio_encoder;
-  LITERT_ASSIGN_OR_RETURN(auto encoder_signature,
+  LITERT_ASSIGN_OR_RETURN(auto& encoder_signature,
                           audio_encoder_model->GetSignature(0));
   const bool is_streaming_encoder =
       IsStreamingEncoder(encoder_signature.InputNames());

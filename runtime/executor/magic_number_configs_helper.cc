@@ -106,7 +106,7 @@ Expected<MagicNumbers> GetMagicNumbersFromModel(const Model& litert_model) {
   auto num_signatures = litert_model.GetNumSignatures();
   MagicNumbers magic_numbers;
   for (int i = 0; i < num_signatures; ++i) {
-    LITERT_ASSIGN_OR_RETURN(auto signature, litert_model.GetSignature(i));
+    LITERT_ASSIGN_OR_RETURN(auto& signature, litert_model.GetSignature(i));
     if (signature.Key().starts_with(kPrefillSignaturePrefix)) {
       for (const auto& input_name : signature.InputNames()) {
         if (absl::StrContains(input_name, kMaskSubstr)) {
@@ -155,14 +155,14 @@ GetVerificationPairs(const Model& litert_model,
   std::vector<std::pair<absl::string_view, absl::string_view>> verify_pairs;
   auto num_signatures = litert_model.GetNumSignatures();
   for (int i = 0; i < num_signatures; ++i) {
-    LITERT_ASSIGN_OR_RETURN(auto signature, litert_model.GetSignature(i));
+    LITERT_ASSIGN_OR_RETURN(auto& signature, litert_model.GetSignature(i));
     if (!signature.Key().starts_with(kPrefillSignaturePrefix) &&
         !signature.Key().starts_with(kDecodeSignaturePrefix)) {
       continue;
     }
 
     for (int j = 0; j < num_signatures; ++j) {
-      LITERT_ASSIGN_OR_RETURN(auto test_signature,
+      LITERT_ASSIGN_OR_RETURN(auto& test_signature,
                               litert_model.GetSignature(j));
       if (!test_signature.Key().starts_with(kTestPrefillSignaturePrefix) &&
           !test_signature.Key().starts_with(kTestDecodeSignaturePrefix)) {

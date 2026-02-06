@@ -63,7 +63,7 @@ absl::StatusOr<bool> IsDynamicTensor(const SimpleTensor& tensor) {
 absl::StatusOr<bool> IsDynamicModel(const Model& model) {
   absl::string_view prefill_signature_key;
   for (int i = 0; i < model.GetNumSignatures(); ++i) {
-    LITERT_ASSIGN_OR_RETURN(auto sig, model.GetSignature(i));
+    LITERT_ASSIGN_OR_RETURN(auto& sig, model.GetSignature(i));
     absl::string_view key = sig.Key();
     if (absl::StartsWith(key, "prefill")) {
       prefill_signature_key = key;
@@ -83,13 +83,11 @@ absl::StatusOr<bool> IsDynamicModel(const Model& model) {
 
     // TODO(b/477657050): Investigate support for dynamic model with optimized
     // gpu cache.
-    if (!absl::c_any_of(prefill_signature.InputNames(),
-                        [&](absl::string_view input_name) {
-                          return absl::StartsWith(input_name,
-                                                  kv_cache_k_root_name) ||
-                                 absl::StartsWith(input_name,
-                                                  kv_cache_v_root_name);
-                        })) {
+    if (!absl::c_any_of(
+            prefill_signature.InputNames(), [&](absl::string_view input_name) {
+              return absl::StartsWith(input_name, kv_cache_k_root_name) ||
+                     absl::StartsWith(input_name, kv_cache_v_root_name);
+            })) {
       return false;
     }
 

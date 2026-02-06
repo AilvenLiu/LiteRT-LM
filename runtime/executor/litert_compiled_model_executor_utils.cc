@@ -198,10 +198,10 @@ absl::StatusOr<SortedPrefillSignatureMap> GetPrefillRunnerSetFromModel(
   SortedPrefillSignatureMap prefill_runner_set;
   auto signatures = model.GetSignatures();
   for (auto& signature : *signatures) {
-    if (auto signature_key = signature.Key();
+    if (auto signature_key = signature->Key();
         absl::StartsWith(signature_key, signature_name_base)) {
       LITERT_ASSIGN_OR_RETURN(auto input_positions_tensor,
-                              signature.InputTensor(input_positions_name));
+                              signature->InputTensor(input_positions_name));
       LITERT_ASSIGN_OR_RETURN(auto ranked_tensor_type,
                               input_positions_tensor.RankedTensorType());
       if (ranked_tensor_type.Layout().Rank() == 2) {
