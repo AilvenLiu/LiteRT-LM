@@ -1427,7 +1427,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
     return absl::InternalError("Failed to build LiteRt model");
   }
 
-  absl::string_view prefill_signature_key = "";
+  std::string prefill_signature_key = "";
   for (int i = 0; i < litert_model->GetNumSignatures(); ++i) {
     LITERT_ASSIGN_OR_RETURN(auto sig, litert_model->GetSignature(i));
     absl::string_view key = sig.Key();
