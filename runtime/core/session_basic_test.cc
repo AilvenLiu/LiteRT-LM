@@ -561,7 +561,8 @@ TEST_F(SessionBasicTest, RunDecodeAsync) {
   EXPECT_OK(
       (*session)->RunPrefillAsync(inputs, CreateTestCallback(done_prefill)));
   bool done_decode = false;
-  EXPECT_OK((*session)->RunDecodeAsync(CreateTestCallback(done_decode)));
+  EXPECT_OK((*session)->RunDecodeAsync(CreateTestCallback(done_decode),
+                                     DecodeConfig::CreateDefault()));
   EXPECT_OK(worker_thread_pool_->WaitUntilDone(absl::Seconds(100)));
   EXPECT_TRUE(done_prefill);
   EXPECT_TRUE(done_decode);

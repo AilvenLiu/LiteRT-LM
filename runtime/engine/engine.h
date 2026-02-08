@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"  // from @com_google_absl
 #include "absl/functional/any_invocable.h"  // from @com_google_absl
 #include "absl/log/absl_log.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
@@ -75,6 +76,7 @@ class Engine {
     class TaskController {
      public:
       TaskController() = default;
+      explicit TaskController(int task_id) : task_id_(task_id) {}
 
       // The TaskController is not copyable. This is to avoid
       // the user from accidentally copying the TaskController and calling the
@@ -101,6 +103,11 @@ class Engine {
       virtual absl::Status Cancel() {
         return absl::UnimplementedError("Not implemented.");
       };
+
+      int GetTaskId() const { return task_id_; }
+
+     private:
+      int task_id_ = -1;
     };
 
     virtual ~Session() = default;
@@ -162,7 +169,8 @@ class Engine {
     virtual absl::StatusOr<std::unique_ptr<TaskController>> RunTextScoringAsync(
         const std::vector<absl::string_view>& target_text,
         absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-        bool store_token_lengths) {
+        bool store_token_lengths,
+        const absl::flat_hash_set<int>& dep_task_ids = {}) {
       return absl::UnimplementedError("Not implemented.");
     }
 
@@ -178,7 +186,8 @@ class Engine {
     // processing status will be signaled through the callback.
     virtual absl::StatusOr<std::unique_ptr<TaskController>> RunPrefillAsync(
         const std::vector<InputData>& contents,
-        absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
+        absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
+        const absl::flat_hash_set<int>& dep_task_ids) {
       return absl::UnimplementedError("Not implemented.");
     }
 
@@ -199,15 +208,9 @@ class Engine {
     // result will be streamed through the callback.
     // - callback: Callback to receive streamed results.
     virtual absl::StatusOr<std::unique_ptr<TaskController>> RunDecodeAsync(
-        absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
-      return absl::UnimplementedError("Not implemented.");
-    }
-
-    // Same as above, but with a custom decode config.
-    // - decode_config: configuration for the model decode process.
-    virtual absl::StatusOr<std::unique_ptr<TaskController>> RunDecodeAsync(
         absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-        const DecodeConfig& decode_config) {
+        const DecodeConfig& decode_config,
+        const absl::flat_hash_set<int>& dep_task_ids = {}) {
       return absl::UnimplementedError("Not implemented.");
     }
 

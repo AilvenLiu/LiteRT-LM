@@ -693,7 +693,8 @@ TEST_F(SessionAdvancedTest, RunDecodeAsyncWithInternalSampler) {
   bool done_prefill = false;
   EXPECT_OK(session->RunPrefillAsync(inputs, CreateTestCallback(done_prefill)));
   bool done_decode = false;
-  EXPECT_OK(session->RunDecodeAsync(CreateTestCallback(done_decode)));
+  EXPECT_OK(session->RunDecodeAsync(CreateTestCallback(done_decode),
+                                  DecodeConfig::CreateDefault()));
   EXPECT_OK(execution_manager->WaitUntilAllDone(absl::Seconds(100)));
   EXPECT_TRUE(done_prefill);
   EXPECT_TRUE(done_decode);
@@ -734,7 +735,8 @@ TEST_F(SessionAdvancedTest, RunDecodeAsyncWithExternalSampler) {
   bool done_prefill = false;
   EXPECT_OK(session->RunPrefillAsync(inputs, CreateTestCallback(done_prefill)));
   bool done_decode = false;
-  EXPECT_OK(session->RunDecodeAsync(CreateTestCallback(done_decode)));
+  EXPECT_OK(session->RunDecodeAsync(CreateTestCallback(done_decode),
+                                  DecodeConfig::CreateDefault()));
   EXPECT_OK(execution_manager->WaitUntilAllDone(absl::Seconds(100)));
   EXPECT_TRUE(done_prefill);
   EXPECT_TRUE(done_decode);
@@ -908,7 +910,8 @@ TEST_F(SessionAdvancedTest, RunPrefillAndDecodeAsyncWithInternalSampler) {
   EXPECT_OK(session->RunPrefill(inputs));
   ASSERT_OK_AND_ASSIGN(auto task_controller,
                        session->RunDecodeAsync(CreateStreamingTestCallback(
-                           status, task_state, texts)));
+                                                   status, task_state, texts),
+                                               DecodeConfig::CreateDefault()));
 
   EXPECT_OK(task_controller->WaitUntilDone(absl::Seconds(10)));
   EXPECT_OK(status);
@@ -956,7 +959,8 @@ TEST_F(SessionAdvancedTest, RunPrefillAndDecodeAsyncWithExternalSampler) {
   EXPECT_OK(session->RunPrefill(inputs));
   ASSERT_OK_AND_ASSIGN(auto task_controller,
                        session->RunDecodeAsync(CreateStreamingTestCallback(
-                           status, task_state, texts)));
+                                                   status, task_state, texts),
+                                               DecodeConfig::CreateDefault()));
 
   EXPECT_OK(task_controller->WaitUntilDone(absl::Seconds(10)));
   EXPECT_OK(status);
@@ -1000,7 +1004,8 @@ TEST_F(SessionAdvancedTest, GenerateContentStream) {
   TaskState task_state;
   std::vector<std::string> texts;
   EXPECT_OK(session->GenerateContentStream(
-      inputs, CreateStreamingTestCallback(status, task_state, texts)));
+      inputs, CreateStreamingTestCallback(status, task_state, texts),
+      DecodeConfig::CreateDefault()));
 
   EXPECT_OK(session->WaitUntilDone());
   EXPECT_OK(status);
@@ -1133,7 +1138,8 @@ TEST_F(SessionAdvancedTest, RunDecodeAsyncFailed) {
   EXPECT_OK(session->RunPrefill(inputs));
   ASSERT_OK_AND_ASSIGN(auto task_controller,
                        session->RunDecodeAsync(CreateStreamingTestCallback(
-                           status, task_state, texts)));
+                           status, task_state, texts),
+                       DecodeConfig::CreateDefault()));
 
   EXPECT_OK(task_controller->WaitUntilDone(absl::Seconds(10)));
   EXPECT_FALSE(status.ok());
@@ -1182,8 +1188,9 @@ TEST_F(SessionAdvancedTest, RunDecodeAsyncWithCancellationWithInternalSampler) {
   EXPECT_OK(session->RunPrefill(inputs));
   ASSERT_OK_AND_ASSIGN(auto task_controller,
                        session->RunDecodeAsync(CreateStreamingTestCallback(
-                           status, task_state, responses,
-                           /*delay_on_next=*/true)));
+                                                   status, task_state, responses,
+                                                   /*delay_on_next=*/true),
+                                               DecodeConfig::CreateDefault()));
 
   // Wait for a short time to ensure the decoding has started.
   absl::SleepFor(absl::Milliseconds(100));
@@ -1240,8 +1247,9 @@ TEST_F(SessionAdvancedTest, RunDecodeAsyncWithCancellationWithExternalSampler) {
   EXPECT_OK(session->RunPrefill(inputs));
   ASSERT_OK_AND_ASSIGN(auto task_controller,
                        session->RunDecodeAsync(CreateStreamingTestCallback(
-                           status, task_state, responses,
-                           /*delay_on_next=*/true)));
+                                                   status, task_state, responses,
+                                                   /*delay_on_next=*/true),
+                                               DecodeConfig::CreateDefault()));
 
   // Wait for a short time to ensure the decoding has started.
   absl::SleepFor(absl::Milliseconds(100));
@@ -1298,7 +1306,8 @@ TEST_F(SessionAdvancedTest,
   ASSERT_OK_AND_ASSIGN(
       auto task_controller,
       session->RunDecodeAsync(CreateStreamingTestCallback(
-          status, task_state, responses, /*delay_on_next=*/true)));
+                                  status, task_state, responses, /*delay_on_next=*/true),
+                              DecodeConfig::CreateDefault()));
 
   // Wait for a short time to ensure the decoding has started.
   absl::SleepFor(absl::Milliseconds(100));
@@ -1357,7 +1366,8 @@ TEST_F(SessionAdvancedTest,
   ASSERT_OK_AND_ASSIGN(
       auto task_controller,
       session->RunDecodeAsync(CreateStreamingTestCallback(
-          status, task_state, responses, /*delay_on_next=*/true)));
+                                  status, task_state, responses, /*delay_on_next=*/true),
+                              DecodeConfig::CreateDefault()));
 
   // Wait for a short time to ensure the decoding has started.
   absl::SleepFor(absl::Milliseconds(100));
@@ -1442,7 +1452,8 @@ TEST_P(SessionAdvancedCancellationTest,
   ASSERT_OK_AND_ASSIGN(
       auto task_controller,
       session->RunDecodeAsync(CreateStreamingTestCallback(
-          status, task_state, responses, /*delay_on_next=*/true)));
+                                  status, task_state, responses, /*delay_on_next=*/true),
+                              DecodeConfig::CreateDefault()));
 
   // Cancel the process.
   session->CancelProcess();
@@ -1460,7 +1471,8 @@ TEST_P(SessionAdvancedCancellationTest,
   ASSERT_OK_AND_ASSIGN(
       task_controller,
       session->RunDecodeAsync(CreateStreamingTestCallback(
-          status, task_state, responses, /*delay_on_next=*/true)));
+                                  status, task_state, responses, /*delay_on_next=*/true),
+                              DecodeConfig::CreateDefault()));
   EXPECT_OK(task_controller->WaitUntilDone(absl::Seconds(10)));
   EXPECT_OK(status);
   EXPECT_EQ(task_state, TaskState::kDependentTaskCancelled);
@@ -1520,7 +1532,8 @@ TEST_P(SessionAdvancedCancellationTest,
   ASSERT_OK_AND_ASSIGN(
       auto task_controller,
       session->RunDecodeAsync(CreateStreamingTestCallback(
-          status, task_state, responses, /*delay_on_next=*/true)));
+                                  status, task_state, responses, /*delay_on_next=*/true),
+                              DecodeConfig::CreateDefault()));
 
   // Cancel the process.
   session->CancelProcess();
@@ -1538,7 +1551,8 @@ TEST_P(SessionAdvancedCancellationTest,
   ASSERT_OK_AND_ASSIGN(
       task_controller,
       session->RunDecodeAsync(CreateStreamingTestCallback(
-          status, task_state, responses, /*delay_on_next=*/true)));
+                                  status, task_state, responses, /*delay_on_next=*/true),
+                              DecodeConfig::CreateDefault()));
   EXPECT_OK(task_controller->WaitUntilDone(absl::Seconds(10)));
   EXPECT_OK(status);
   EXPECT_EQ(task_state, TaskState::kDependentTaskCancelled);

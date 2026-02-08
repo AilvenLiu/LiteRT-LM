@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "absl/base/thread_annotations.h"  // from @com_google_absl
+#include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/functional/any_invocable.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
@@ -31,6 +32,7 @@
 #include "runtime/components/constrained_decoding/constraint_provider.h"
 #include "runtime/components/constrained_decoding/constraint_provider_config.h"
 #include "runtime/components/prompt_template.h"
+#include "runtime/components/tokenizer.h"
 #include "runtime/conversation/io_types.h"
 #include "runtime/conversation/model_data_processor/config_registry.h"
 #include "runtime/conversation/model_data_processor/model_data_processor.h"
@@ -283,6 +285,11 @@ struct OptionalArgs {
   // The arguments for the model data processor. Most of the time, the users
   // don't need to provide this argument.
   std::optional<DataProcessorArguments> args = std::nullopt;
+
+  // The task group id for asynchronous tasks. If provided, the task
+  // controller will be stored and can be cancelled by calling
+  // `Conversation::CancelGroup(task_group_id)`.
+  std::optional<std::string> task_group_id = std::nullopt;
 };
 
 // A multi-turn centric stateful Conversation API for high-level user
@@ -433,6 +440,9 @@ class Conversation {
   // Returns the configuration used for creating the Conversation.
   const ConversationConfig& GetConfig() const { return config_; }
 
+  // Returns the tokenizer used for the conversation.
+  const Tokenizer& GetTokenizer() const { return session_->GetTokenizer(); }
+
   // Returns the benchmark info for the conversation. Under the hood, this
   // method triggers the benchmark info collection from the Session. Returns:
   // - The benchmark info for the conversation.
@@ -448,6 +458,11 @@ class Conversation {
   // Note: the underlying Session is not rollbacked, so the message
   // from the user is actually sent to the LLM and processed for prefill.
   void CancelProcess();
+
+  // Cancels all ongoing asynchronous tasks with the given task_group_id.
+  // Args:
+  // - `task_group_id`: The id of the task group to cancel.
+  void CancelGroup(absl::string_view task_group_id);
 
  private:
   explicit Conversation(
@@ -474,6 +489,15 @@ class Conversation {
   absl::StatusOr<DecodeConfig> CreateDecodeConfig(
       std::optional<ConstraintArg> decoding_constraint = std::nullopt);
 
+  // Adds a task controller to the task_controllers_ map if task_group_id is
+  // provided.
+  // Args:
+  // - `task_group_id`: The id of the task group to add the controller to.
+  // - `task_controller`: The task controller to add.
+  void AddTaskController(
+      const std::optional<std::string>& task_group_id,
+      std::unique_ptr<Engine::Session::TaskController> task_controller);
+
   std::unique_ptr<Engine::Session> session_;
   std::unique_ptr<ModelDataProcessor> model_data_processor_;
   Preface preface_;
@@ -488,6 +512,14 @@ class Conversation {
 
   // Whether the current conversation is in message appending state.
   bool is_appending_message_ = false;
+
+  // Mutex for task_controllers_.
+  mutable absl::Mutex task_controllers_mutex_;
+  // Map of task group id to task controllers.
+  absl::flat_hash_map<
+      std::string,
+      std::vector<std::unique_ptr<Engine::Session::TaskController>>>
+      task_controllers_ ABSL_GUARDED_BY(task_controllers_mutex_);
 };
 }  // namespace litert::lm
 

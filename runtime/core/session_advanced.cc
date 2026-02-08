@@ -84,7 +84,8 @@ absl::Status SessionAdvanced::RunPrefill(
 absl::StatusOr<std::unique_ptr<TaskController>>
 SessionAdvanced::RunPrefillAsync(
     const std::vector<InputData>& contents,
-    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
+    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
+    const absl::flat_hash_set<TaskId>& dep_task_ids) {
   auto cancelled = std::make_shared<std::atomic<bool>>(false);
 
   auto execution_manager_lock = execution_manager_.lock();
@@ -121,8 +122,9 @@ SessionAdvanced::RunPrefillAsync(
   }
   ASSIGN_OR_RETURN(auto task_id, execution_manager_lock->GetNewTaskId());
   RETURN_IF_ERROR(execution_manager_lock->AddPrefillTask(
-      session_id_, task_id, std::move(preprocessed_contents), last_task_ids_,
-      cancelled, std::move(callback)));
+      session_id_, task_id, std::move(preprocessed_contents),
+      dep_task_ids.empty() ? last_task_ids_ : dep_task_ids, cancelled,
+      std::move(callback)));
   session_state_ = SessionState::kPrefilled;
   last_task_ids_ = {task_id};
 
@@ -201,13 +203,9 @@ absl::StatusOr<Responses> SessionAdvanced::RunDecode(
 }
 
 absl::StatusOr<std::unique_ptr<TaskController>> SessionAdvanced::RunDecodeAsync(
-    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
-  return RunDecodeAsync(std::move(callback), DecodeConfig::CreateDefault());
-}
-
-absl::StatusOr<std::unique_ptr<TaskController>> SessionAdvanced::RunDecodeAsync(
     absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-    const DecodeConfig& decode_config) {
+    const DecodeConfig& decode_config,
+    const absl::flat_hash_set<TaskId>& dep_task_ids) {
   if (session_state_ != SessionState::kPrefilled) {
     return absl::InternalError("Session is not prefilled yet.");
   }
@@ -238,7 +236,8 @@ absl::StatusOr<std::unique_ptr<TaskController>> SessionAdvanced::RunDecodeAsync(
       ASSIGN_OR_RETURN(auto task_id, execution_manager_lock->GetNewTaskId());
       RETURN_IF_ERROR(execution_manager_lock->AddPrefillTask(
           session_id_, task_id, std::move(preprocessed_contents),
-          last_task_ids_, cancelled, std::move(noop_callback)));
+          dep_task_ids.empty() ? last_task_ids_ : dep_task_ids, cancelled,
+          std::move(noop_callback)));
       last_task_ids_ = {task_id};
     }
   }
@@ -247,8 +246,9 @@ absl::StatusOr<std::unique_ptr<TaskController>> SessionAdvanced::RunDecodeAsync(
   ASSIGN_OR_RETURN(auto task_id, execution_manager_lock->GetNewTaskId());
 
   RETURN_IF_ERROR(execution_manager_lock->AddDecodeTask(
-      session_id_, task_id, last_task_ids_, decode_config.GetConstraint(),
-      cancelled, std::move(callback)));
+      session_id_, task_id,
+      dep_task_ids.empty() ? last_task_ids_ : dep_task_ids,
+      decode_config.GetConstraint(), cancelled, std::move(callback)));
 
   last_task_ids_ = {task_id};
 
@@ -286,7 +286,7 @@ absl::StatusOr<std::unique_ptr<Engine::Session::TaskController>>
 SessionAdvanced::RunTextScoringAsync(
     const std::vector<absl::string_view>& target_text,
     absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-    bool store_token_lengths) {
+    bool store_token_lengths, const absl::flat_hash_set<TaskId>& dep_task_ids) {
   if (target_text.size() != 1) {
     return absl::InvalidArgumentError("Target text size should be 1.");
   }
@@ -298,8 +298,9 @@ SessionAdvanced::RunTextScoringAsync(
   auto cancelled = std::make_shared<std::atomic<bool>>(false);
   ASSIGN_OR_RETURN(auto task_id, execution_manager_lock->GetNewTaskId());
   RETURN_IF_ERROR(execution_manager_lock->AddTextScoringTask(
-      session_id_, task_id, last_task_ids_, target_text, store_token_lengths,
-      cancelled, std::move(callback)));
+      session_id_, task_id,
+      dep_task_ids.empty() ? last_task_ids_ : dep_task_ids, target_text,
+      store_token_lengths, cancelled, std::move(callback)));
 
   return std::make_unique<AdvancedTaskController>(task_id, cancelled,
                                                   execution_manager_);

@@ -47,7 +47,7 @@ class SessionAdvanced : public Engine::Session {
     AdvancedTaskController(TaskId task_id,
                            std::shared_ptr<std::atomic<bool>> cancelled,
                            std::weak_ptr<ExecutionManager> execution_manager)
-        : task_id_(task_id),
+        : Engine::Session::TaskController(task_id),
           cancelled_(cancelled),
           execution_manager_(execution_manager) {}
 
@@ -57,7 +57,7 @@ class SessionAdvanced : public Engine::Session {
         return absl::FailedPreconditionError(
             "Execution manager is not available.");
       }
-      return execution_manager_lock->WaitUntilDone(task_id_, timeout);
+      return execution_manager_lock->WaitUntilDone(GetTaskId(), timeout);
     }
 
     absl::Status Cancel() override {
@@ -66,9 +66,6 @@ class SessionAdvanced : public Engine::Session {
     }
 
    private:
-    // The task ID of the async task.
-    TaskId task_id_;
-
     // An atomic boolean to indicate whether the session is cancelled.
     std::shared_ptr<std::atomic<bool>> cancelled_;
 
@@ -124,13 +121,15 @@ class SessionAdvanced : public Engine::Session {
   RunTextScoringAsync(
       const std::vector<absl::string_view>& target_text,
       absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-      bool store_token_lengths) override;
+      bool store_token_lengths,
+      const absl::flat_hash_set<int>& dep_task_ids = {}) override;
 
   absl::Status RunPrefill(const std::vector<InputData>& contents) override;
 
   absl::StatusOr<std::unique_ptr<TaskController>> RunPrefillAsync(
       const std::vector<InputData>& contents,
-      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) override;
+      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
+      const absl::flat_hash_set<int>& dep_task_ids = {}) override;
 
   absl::StatusOr<Responses> RunDecode() override;
 
@@ -138,11 +137,9 @@ class SessionAdvanced : public Engine::Session {
       const DecodeConfig& decode_config) override;
 
   absl::StatusOr<std::unique_ptr<TaskController>> RunDecodeAsync(
-      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) override;
-
-  absl::StatusOr<std::unique_ptr<TaskController>> RunDecodeAsync(
       absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-      const DecodeConfig& decode_config) override;
+      const DecodeConfig& decode_config,
+      const absl::flat_hash_set<int>& dep_task_ids = {}) override;
 
   absl::StatusOr<BenchmarkInfo> GetBenchmarkInfo() override;
 

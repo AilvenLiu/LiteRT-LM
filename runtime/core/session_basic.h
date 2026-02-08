@@ -97,14 +97,16 @@ class SessionBasic : public Engine::Session {
   RunTextScoringAsync(
       const std::vector<absl::string_view>& target_text,
       absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-      bool store_token_lengths) override;
+      bool store_token_lengths,
+      const absl::flat_hash_set<int>& dep_task_ids = {}) override;
 
   absl::Status RunPrefill(const std::vector<InputData>& contents) override;
 
   absl::StatusOr<std::unique_ptr<Engine::Session::TaskController>>
   RunPrefillAsync(
       const std::vector<InputData>& contents,
-      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) override;
+      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
+      const absl::flat_hash_set<int>& dep_task_ids = {}) override;
 
   absl::StatusOr<Responses> RunDecode() override;
 
@@ -112,12 +114,9 @@ class SessionBasic : public Engine::Session {
       const DecodeConfig& decode_config) override;
 
   absl::StatusOr<std::unique_ptr<Engine::Session::TaskController>>
-  RunDecodeAsync(
-      absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) override;
-
-  absl::StatusOr<std::unique_ptr<Engine::Session::TaskController>>
   RunDecodeAsync(absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-                 const DecodeConfig& decode_config) override;
+                 const DecodeConfig& decode_config,
+                 const absl::flat_hash_set<int>& dep_task_ids = {}) override;
 
   absl::StatusOr<BenchmarkInfo> GetBenchmarkInfo() override;
 

@@ -292,7 +292,12 @@ absl::Status SessionBasic::RunPrefill(const std::vector<InputData>& contents) {
 
 absl::StatusOr<std::unique_ptr<TaskController>> SessionBasic::RunPrefillAsync(
     const std::vector<InputData>& contents,
-    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
+    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
+    const absl::flat_hash_set<int>& dep_task_ids) {
+  if (!dep_task_ids.empty()) {
+    return absl::UnimplementedError(
+        "SessionBasic does not support task dependencies.");
+  }
   if (contents.empty()) {
     return absl::InvalidArgumentError("Input is empty.");
   }
@@ -346,7 +351,7 @@ absl::StatusOr<std::unique_ptr<TaskController>> SessionBasic::RunPrefillAsync(
           callback(Responses(TaskState::kDone));
         }
       }));
-  return nullptr;
+  return std::make_unique<TaskController>();
 }
 
 absl::StatusOr<Responses> SessionBasic::DecodeInternal(
@@ -441,13 +446,13 @@ absl::StatusOr<Responses> SessionBasic::RunDecode(
 }
 
 absl::StatusOr<std::unique_ptr<TaskController>> SessionBasic::RunDecodeAsync(
-    absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback) {
-  return RunDecodeAsync(std::move(callback), DecodeConfig::CreateDefault());
-}
-
-absl::StatusOr<std::unique_ptr<TaskController>> SessionBasic::RunDecodeAsync(
     absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-    const DecodeConfig& decode_config) {
+    const DecodeConfig& decode_config,
+    const absl::flat_hash_set<int>& dep_task_ids) {
+  if (!dep_task_ids.empty()) {
+    return absl::UnimplementedError(
+        "SessionBasic does not support task dependencies.");
+  }
   ABSL_LOG(INFO) << "RunDecodeAsync";
   if (cancelled_.load()) {
     // Reset the cancelled flag before processing the next turn.
@@ -458,7 +463,7 @@ absl::StatusOr<std::unique_ptr<TaskController>> SessionBasic::RunDecodeAsync(
         this->DecodeInternalStreaming(std::move(callback), decode_config)
             .IgnoreError();
       }));
-  return nullptr;
+  return std::make_unique<TaskController>();
 }
 
 absl::StatusOr<Responses> SessionBasic::GenerateContent(
@@ -492,7 +497,11 @@ absl::StatusOr<std::unique_ptr<Engine::Session::TaskController>>
 SessionBasic::RunTextScoringAsync(
     const std::vector<absl::string_view>& target_text,
     absl::AnyInvocable<void(absl::StatusOr<Responses>)> callback,
-    bool store_token_lengths) {
+    bool store_token_lengths, const absl::flat_hash_set<int>& dep_task_ids) {
+  if (!dep_task_ids.empty()) {
+    return absl::UnimplementedError(
+        "SessionBasic does not support task dependencies.");
+  }
   if (target_text.size() != 1) {
     return absl::InvalidArgumentError("Target text size should be 1.");
   }
@@ -516,7 +525,7 @@ SessionBasic::RunTextScoringAsync(
             executor_, tokenizer_, target_text, temperature,
             std::move(decoded_ids_buffer.Value()), store_token_lengths));
       }));
-  return nullptr;
+  return std::make_unique<TaskController>();
 }
 
 absl::Status SessionBasic::GenerateContentStream(
