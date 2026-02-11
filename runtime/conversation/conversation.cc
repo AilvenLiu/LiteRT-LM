@@ -63,6 +63,14 @@ bool IsEmptyInputError(const absl::Status& status) {
 absl::Status IgnoreEmptyInputError(const absl::Status& status) {
   return IsEmptyInputError(status) ? absl::OkStatus() : status;
 }
+
+bool IsEmptyPreface(const Preface& preface) {
+  auto json_preface = std::get<JsonPreface>(preface);
+  return (json_preface.messages.is_null() || json_preface.messages.empty()) &&
+         (json_preface.tools.is_null() || json_preface.tools.empty()) &&
+         (json_preface.extra_context.is_null() ||
+          json_preface.extra_context.empty());
+}
 }  // namespace
 
 absl::StatusOr<ConversationConfig> ConversationConfig::CreateDefault(
@@ -172,9 +180,11 @@ absl::StatusOr<std::string> Conversation::GetSingleTurnTextFromFullHistory(
     return prompt_template_.Apply(new_tmpl_input);
   }
 
-  old_tmpl_input.add_generation_prompt = false;
-  ASSIGN_OR_RETURN(const std::string old_string,
-                   prompt_template_.Apply(old_tmpl_input));
+  std::string old_string;
+  if (!IsEmptyPreface(preface_) || !history_.empty()) {
+    old_tmpl_input.add_generation_prompt = false;
+    ASSIGN_OR_RETURN(old_string, prompt_template_.Apply(old_tmpl_input));
+  }
 
   PromptTemplateInput new_tmpl_input = std::move(old_tmpl_input);
   for (const auto& message : messages) {
@@ -274,16 +284,19 @@ absl::StatusOr<std::unique_ptr<Conversation>> Conversation::Create(
   auto conversation = absl::WrapUnique(new Conversation(
       std::move(session), std::move(model_data_processor), config.GetPreface(),
       config.GetPromptTemplate(), config, std::move(constraint_provider)));
-  if (config.prefill_preface_on_init()) {
+  if (config.prefill_preface_on_init() &&
+      !IsEmptyPreface(config.GetPreface())) {
     std::string single_turn_text;
     std::vector<Message> tmp_history;
+    bool fallback =
+        !conversation->prompt_template_.GetCapabilities().supports_single_turn;
     const auto render_result =
         conversation->model_data_processor_->RenderSingleTurnTemplate(
             tmp_history, config.GetPreface(), JsonMessage(),
             config.GetPromptTemplate(),
             /*current_is_appending_message=*/false,
             /*append_message=*/false);
-    if (absl::IsUnimplemented(render_result.status())) {
+    if (fallback || absl::IsUnimplemented(render_result.status())) {
       // Fallback to the old way of prefilling the preface.
       PromptTemplateInput tmpl_input;
       RETURN_IF_ERROR(FillPrefaceForPromptTemplateInput(

@@ -64,6 +64,9 @@ constexpr char kGemma3ToolsMultiPrefillTemplatePath[] =
     "litert_lm/runtime/components/testdata/"
     "google-gemma-3n-e2b-it-tools-multi-prefill.jinja";
 
+constexpr char kGemma3TemplatePath[] =
+    "litert_lm/runtime/components/testdata/google-gemma-3-1b-it.jinja";
+
 constexpr absl::string_view kTestJinjaPromptTemplate = R"jinja(
 {%- for message in messages -%}
   {{- '<start_of_turn>' + message.role + '\n' -}}
@@ -355,6 +358,7 @@ TEST_P(ConversationTest, SendMessage) {
   engine_settings.GetMutableMainExecutorSettings().SetCacheDir(":nocache");
   engine_settings.GetMutableMainExecutorSettings().SetMaxNumTokens(10);
   ASSERT_OK_AND_ASSIGN(auto engine, EngineFactory::CreateAny(engine_settings));
+
   ASSERT_OK_AND_ASSIGN(
       auto config,
       ConversationConfig::Builder()
@@ -377,6 +381,32 @@ TEST_P(ConversationTest, SendMessage) {
   EXPECT_EQ(json_message, expected_message);
   EXPECT_THAT(conversation->GetHistory(),
               testing::ElementsAre(user_message, expected_message));
+}
+
+TEST_P(ConversationTest, SendMessageGemma3Template) {
+  ASSERT_OK_AND_ASSIGN(auto model_assets,
+                       ModelAssets::Create(GetTestdataPath(kTestLlmPath)));
+  ASSERT_OK_AND_ASSIGN(auto engine_settings, EngineSettings::CreateDefault(
+                                                 model_assets, Backend::CPU));
+  engine_settings.GetMutableMainExecutorSettings().SetCacheDir(":nocache");
+  engine_settings.GetMutableMainExecutorSettings().SetMaxNumTokens(20);
+  ASSERT_OK_AND_ASSIGN(auto engine, EngineFactory::CreateAny(engine_settings));
+
+  std::string gemma3_prompt_template =
+      ReadFile(GetTestdataPath(kGemma3TemplatePath));
+
+  ASSERT_OK_AND_ASSIGN(
+      auto config,
+      ConversationConfig::Builder()
+          .SetEnableConstrainedDecoding(enable_constrained_decoding_)
+          .SetPrefillPrefaceOnInit(prefill_preface_on_init_)
+          .SetOverwritePromptTemplate(PromptTemplate(gemma3_prompt_template))
+          .Build(*engine));
+  ASSERT_OK_AND_ASSIGN(auto conversation,
+                       Conversation::Create(*engine, config));
+  EXPECT_THAT(conversation->GetHistory(), testing::IsEmpty());
+  JsonMessage user_message = {{"role", "user"}, {"content", "Hello world!"}};
+  EXPECT_OK(conversation->SendMessage(user_message));
 }
 
 TEST_P(ConversationTest, SendSingleMessage) {
