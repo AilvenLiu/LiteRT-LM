@@ -957,22 +957,27 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::FillInputBufferWithToken(
 }
 
 absl::Status LlmLiteRtCompiledModelExecutorBase::RollBackProcessedTokens() {
-  if (llm_context_->runtime_state().current_step ==
-      llm_context_->processed_context().processed_tokens().TokenCount()) {
+  int current_step = llm_context_->runtime_state().current_step;
+  ProcessedTokens& processed_tokens =
+      llm_context_->processed_context().processed_tokens();
+  if (current_step == processed_tokens.TokenCount()) {
     return absl::OkStatus();
   }
-  if (llm_context_->runtime_state().current_step == 0) {
-    RETURN_IF_ERROR(
-        llm_context_->processed_context().processed_tokens().RollBackToStep(0));
+  if (current_step == 0) {
+    RETURN_IF_ERROR(processed_tokens.RollBackToStep(0));
   } else {
-    auto step_and_token =
-        llm_context_->processed_context().processed_tokens().GetTokenAtStep(
-            llm_context_->runtime_state().current_step - 1);
-    RETURN_IF_ERROR(
-        llm_context_->processed_context().processed_tokens().RollBackToStep(
-            llm_context_->runtime_state().current_step - 1));
-    llm_context_->processed_context().processed_tokens().AddProcessedTokens(
-        {step_and_token});
+    auto token_at_step = processed_tokens.GetTokenAtStep(current_step - 1);
+    RETURN_IF_ERROR(processed_tokens.RollBackToStep(current_step - 1));
+    if (!token_at_step.empty()) {
+      RET_CHECK_EQ(token_at_step.size(), 1);
+      // Multimodal input cannot become a pending input token.
+      if (token_at_step.at(0) > 0) {
+        RETURN_IF_ERROR(processed_tokens.AddPendingInputToken(
+            {std::make_shared<TokenData>(token_at_step.at(0))}));
+      } else {
+        processed_tokens.AddProcessedTokens({token_at_step.at(0)});
+      }
+    }
   }
 
   // Reset sampler input handling as the step is rolled back.

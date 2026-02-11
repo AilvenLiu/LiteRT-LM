@@ -39,6 +39,7 @@
 #include "runtime/engine/engine.h"
 #include "runtime/engine/engine_settings.h"
 #include "runtime/engine/io_types.h"
+#include "runtime/util/status_macros.h"
 
 namespace litert::lm {
 
@@ -155,6 +156,13 @@ class ConversationConfig {
           engine, session_config_, preface_, overwrite_prompt_template_,
           overwrite_processor_config_, enable_constrained_decoding_,
           prefill_preface_on_init_, constraint_provider_config_);
+    }
+
+    // Returns a unique pointer to a ConversationConfig.
+    absl::StatusOr<std::unique_ptr<ConversationConfig>> BuildUnique(
+        const Engine& engine) {
+      ASSIGN_OR_RETURN(ConversationConfig config, Build(engine));
+      return std::make_unique<ConversationConfig>(std::move(config));
     }
 
    private:
