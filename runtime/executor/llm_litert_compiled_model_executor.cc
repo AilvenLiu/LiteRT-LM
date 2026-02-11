@@ -425,6 +425,40 @@ absl::Span<const T> GetSpanForChunk(absl::Span<T> span, int num_chunks,
   return span.subspan(chunk_size * chunk_index, chunk_size);
 }
 
+absl::StatusOr<TensorBuffer> CreateFP16OutputBuffer(
+    Environment& env, CompiledModel& compiled_model, size_t signature_index,
+    absl::string_view output_name, size_t output_index) {
+  LITERT_ASSIGN_OR_RETURN(
+      std::vector<Layout> runtime_layouts,
+      compiled_model.GetOutputTensorLayouts(signature_index,
+                                            /*update_allocation=*/true));
+  // Use runtime layout.
+  Layout runtime_layout = runtime_layouts[output_index];
+  LITERT_ASSIGN_OR_RETURN(auto requirements,
+                          compiled_model.GetOutputBufferRequirements(
+                              signature_index, output_name));
+  LITERT_ASSIGN_OR_RETURN(auto strides, requirements.Strides());
+  if (!strides.empty()) {
+    auto dims = runtime_layout.Dimensions();
+    runtime_layout =
+        Layout(litert::Dimensions(dims.begin(), dims.end()),
+               litert::Strides(strides.begin(), strides.end()));
+  }
+  RankedTensorType new_tensor_type(litert::ElementType::Float16,
+                                   std::move(runtime_layout));
+  LITERT_ASSIGN_OR_RETURN(size_t size, requirements.BufferSize());
+  LITERT_ASSIGN_OR_RETURN(auto buffer_types, requirements.SupportedTypes());
+  if (buffer_types.empty()) {
+    return absl::InternalError("No supported buffer types found.");
+  }
+  auto buffer_type = buffer_types[0];
+  LITERT_ASSIGN_OR_RETURN(
+      auto buffer,
+      TensorBuffer::CreateManaged(env, buffer_type, std::move(new_tensor_type),
+                                  size));
+  return buffer;
+}
+
 }  // namespace
 
 absl::Status LlmLiteRtCompiledModelExecutorBase::CreatePrefillInputBuffers(
@@ -1272,7 +1306,19 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::SetSamplerInputHandling(
 absl::Status LlmLiteRtCompiledModelExecutorBase::SampleLogits(
     const TensorBuffer& logits, TensorBuffer& ids_tensor) {
   if (sampler_ == nullptr) {
-    RETURN_IF_ERROR(InitializeSampler(logits_data_type_));
+    LITERT_ASSIGN_OR_RETURN(auto logits_tensor_type, logits.TensorType());
+    ActivationDataType logits_data_type;
+    if (logits_tensor_type.ElementType() == ElementType::Float16) {
+      logits_data_type = ActivationDataType::FLOAT16;
+    } else if (logits_tensor_type.ElementType() == ElementType::Float32) {
+      logits_data_type = ActivationDataType::FLOAT32;
+    } else {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Unsupported logits data type for sampler: ",
+                       static_cast<int>(logits_tensor_type.ElementType())));
+    }
+
+    RETURN_IF_ERROR(InitializeSampler(logits_data_type));
   }
 
   if (sampler_handles_input_) {
@@ -1291,20 +1337,16 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::SetCurrentStep(int new_step) {
   }
 
   int max_step = old_step;
-  RET_CHECK_LE(new_step, max_step)
-          .SetCode(absl::StatusCode::kInvalidArgument)
-      << "New step cannot be greater than the max step: "
-      << max_step;
+  RET_CHECK_LE(new_step, max_step).SetCode(absl::StatusCode::kInvalidArgument)
+      << "New step cannot be greater than the max step: " << max_step;
   RET_CHECK_GE(new_step, 0).SetCode(absl::StatusCode::kInvalidArgument)
       << "New step cannot be negative.";
   if (new_step == max_step) {
     llm_context_->runtime_state().current_step = new_step;
     return absl::OkStatus();
   }
-  RET_CHECK_LE(new_step, max_step)
-          .SetCode(absl::StatusCode::kInvalidArgument)
-      << "New step cannot be greater than the max step: "
-      << max_step;
+  RET_CHECK_LE(new_step, max_step).SetCode(absl::StatusCode::kInvalidArgument)
+      << "New step cannot be greater than the max step: " << max_step;
   if (new_step < 0) {
     // Current step is negative after rolling back. This can only happen when
     // the user wants to set the step to 0 while there is a pending input token.
@@ -1457,6 +1499,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
                               compilation_options.GetGpuOptions());
       gpu_compilation_options.EnableInfiniteFloatCapping(true);
       if (activation_data_type == ActivationDataType::FLOAT32) {
+        use_fp16_precision = false;
         gpu_compilation_options.SetPrecision(GpuOptions::Precision::kFp32);
       } else {
         gpu_compilation_options.SetPrecision(GpuOptions::Precision::kFp16);
@@ -1604,7 +1647,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
           default_xnnpack_flags |
           TFLITE_XNNPACK_DELEGATE_FLAG_ENABLE_LATEST_OPERATORS);
       LITERT_ASSIGN_OR_RETURN(auto& runtime_options,
-                             compilation_options.GetRuntimeOptions());
+                              compilation_options.GetRuntimeOptions());
       runtime_options.SetCompressQuantizationZeroPoints(true);
       compilation_options.SetHardwareAccelerators(HwAccelerators::kCpu);
       break;
@@ -1693,20 +1736,44 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       // We let LoraManager handle LoRA inputs.
       continue;
     }
-    if (!absl::StartsWith(input_name, kv_cache_k_root_name) &&
-        !absl::StartsWith(input_name, kv_cache_v_root_name)) {
-      LITERT_ASSIGN_OR_RETURN(
-          auto input_buffer,
-          compiled_model.CreateInputBuffer(kDecodeSignatureRunner, input_name));
-      decode_input_buffers[input_name] = std::move(input_buffer);
+    if (absl::StartsWith(input_name, kv_cache_k_root_name) ||
+        absl::StartsWith(input_name, kv_cache_v_root_name)) {
+      continue;
     }
+    LITERT_ASSIGN_OR_RETURN(
+        auto input_buffer,
+        compiled_model.CreateInputBuffer(kDecodeSignatureRunner, input_name));
+    decode_input_buffers[input_name] = std::move(input_buffer);
   }
-  for (auto output_name : decode_signature.OutputNames()) {
-    if (!absl::StartsWith(output_name, kv_cache_k_root_name) &&
-        !absl::StartsWith(output_name, kv_cache_v_root_name)) {
+  auto output_names = decode_signature.OutputNames();
+  for (int i = 0; i < output_names.size(); ++i) {
+    auto output_name = output_names[i];
+    if (absl::StartsWith(output_name, kv_cache_k_root_name) ||
+        absl::StartsWith(output_name, kv_cache_v_root_name)) {
+      continue;
+    }
+    // If we are using the GPU sampler and the model is compiled with FP16
+    // precision, we force the output logits to be FP16 as the
+    // GPU sampler supports FP16 inputs.
+    // If we use CPU sampler or the model is executed with FP32 / mixed
+    // precision, we will keep the logits in FP32
+    auto sampler_backend = GetSamplerBackend(executor_settings);
+
+    if (output_name == signatures.output_logits && use_fp16_precision &&
+        sampler_backend.ok() && *sampler_backend == Backend::GPU) {
+      LITERT_ASSIGN_OR_RETURN(
+          size_t signature_index,
+          compiled_model.GetSignatureIndex(kDecodeSignatureRunner));
+      LITERT_ASSIGN_OR_RETURN(auto output_buffer,
+                              CreateFP16OutputBuffer(lrt_env, compiled_model,
+                                                     signature_index,
+                                                     output_name, i));
+      decode_output_buffers[output_name] = std::move(output_buffer);
+    } else {
       LITERT_ASSIGN_OR_RETURN(auto output_buffer,
                               compiled_model.CreateOutputBuffer(
                                   kDecodeSignatureRunner, output_name));
+
       decode_output_buffers[output_name] = std::move(output_buffer);
     }
   }
