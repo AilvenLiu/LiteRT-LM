@@ -37,6 +37,8 @@ package_group(
         "//runtime/e2e_tests/...",
         "//third_party/odml/litert_lm/c/...",
         "//c/...",
+        # SpeechProcessor
+        "//third_party/odml/audio/transcription/...",
     ],
 )
 
