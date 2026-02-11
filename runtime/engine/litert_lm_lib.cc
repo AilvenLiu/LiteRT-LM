@@ -235,9 +235,10 @@ absl::StatusOr<EngineSettings> CreateEngineSettings(
   }
 
   if (settings.benchmark) {
-    if (settings.multi_turns) {
-      ABSL_LOG(FATAL)
-          << "Benchmarking with multi-turns input is not supported.";
+    if (settings.multi_turns && settings.async) {
+      // TODO(b/483699181) - Support benchmarking for multi-turns and async.
+      ABSL_LOG(ERROR) << "Benchmark with multi-turns and async do not show "
+                         "results, use sync mode instead.";
     }
 
     litert::lm::proto::BenchmarkParams benchmark_params;
