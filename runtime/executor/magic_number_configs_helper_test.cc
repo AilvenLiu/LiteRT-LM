@@ -148,7 +148,7 @@ TEST(MagicNumberConfigsHelperTest, None_ExplictSettings) {
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -240,7 +240,7 @@ TEST(MagicNumberConfigsHelperTest,
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.verify_magic_numbers = true};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -306,7 +306,7 @@ TEST(MagicNumberConfigsHelperTest, Both_ExplictSettings) {
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -337,7 +337,7 @@ TEST(MagicNumberConfigsHelperTest, Both_ExplictSettingsLargerThanMagicNumbers) {
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(9000);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {5000}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -369,7 +369,7 @@ TEST(MagicNumberConfigsHelperTest, Both_ExplictSettingsWithVerifications) {
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024},
                                      .verify_magic_numbers = true};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -415,7 +415,7 @@ TEST(MagicNumberConfigsHelperTest,
   // prefill_batch_sizes is not matched with test_prefill_1280.
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {512},
                                      .verify_magic_numbers = true};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -489,7 +489,7 @@ TEST(MagicNumberConfigsHelperTest, DecodeBatch_ExplictSettings) {
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024},
                                      .num_output_candidates = 3};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -527,7 +527,7 @@ TEST(MagicNumberConfigsHelperTest,
   executor_settings->SetMaxNumTokens(9000);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {5000},
                                      .num_output_candidates = 20};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -566,7 +566,7 @@ TEST(MagicNumberConfigsHelperTest,
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024},
                                      .num_output_candidates = 3,
                                      .verify_magic_numbers = true};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -618,7 +618,7 @@ TEST(MagicNumberConfigsHelperTest,
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {512},
                                      .num_output_candidates = 3,
                                      .verify_magic_numbers = true};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -706,7 +706,7 @@ TEST(MagicNumberConfigsHelperTest, Multi_LessExplictSettings) {
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024, 128}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -754,7 +754,7 @@ TEST(MagicNumberConfigsHelperTest,
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(8192);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {512, 6144}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -801,7 +801,7 @@ TEST(MagicNumberConfigsHelperTest, Multi_MoreExplictSettings) {
   executor_settings->SetMaxNumTokens(3072);
   AdvancedSettings advanced_settings{
       .prefill_batch_sizes = {1024, 128, 2048, 32, 8}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -850,7 +850,7 @@ TEST(MagicNumberConfigsHelperTest, Multi_MoreExplictSettings_SkipLast) {
   executor_settings->SetMaxNumTokens(3072);
   AdvancedSettings advanced_settings{
       .prefill_batch_sizes = {1024, 128, 256, 512, 2048, 32}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -902,7 +902,7 @@ TEST(MagicNumberConfigsHelperTest,
   executor_settings->SetMaxNumTokens(256);
   AdvancedSettings advanced_settings{
       .prefill_batch_sizes = {1024, 64, 256, 512, 128}};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -953,7 +953,7 @@ TEST(MagicNumberConfigsHelperTest, Multi_LessExplictSettingsWithVerifications) {
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024, 256},
                                      .verify_magic_numbers = true};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;
@@ -1020,7 +1020,7 @@ TEST(MagicNumberConfigsHelperTest,
   executor_settings->SetMaxNumTokens(1280);
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024, 128, 512},
                                      .verify_magic_numbers = true};
-  executor_settings->SetAdvancedSettings(advanced_settings);
+  executor_settings->GetMutableAdvancedSettings() = advanced_settings;
 
   ModelResourcesMock model_resources(*model);
   MagicNumberConfigsHelper helper;

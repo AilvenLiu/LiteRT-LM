@@ -281,10 +281,12 @@ class LlmExecutorSettings : public ExecutorSettingsBase {
   const std::optional<AdvancedSettings>& GetAdvancedSettings() const {
     return advanced_settings_;
   }
-  void SetAdvancedSettings(const AdvancedSettings& advanced_settings) {
-    advanced_settings_ = advanced_settings;
+  AdvancedSettings& GetMutableAdvancedSettings() {
+    if (!advanced_settings_.has_value()) {
+      advanced_settings_.emplace();
+    }
+    return *advanced_settings_;
   }
-
   absl::Status SetSupportedLoraRanks(const std::vector<uint32_t>& lora_ranks) {
     if (std::holds_alternative<GpuArtisanConfig>(backend_config_)) {
       std::get<GpuArtisanConfig>(backend_config_).supported_lora_ranks =

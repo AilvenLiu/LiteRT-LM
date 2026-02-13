@@ -214,8 +214,8 @@ absl::StatusOr<EngineSettings> CreateEngineSettings(
     advanced_settings.allow_src_quantized_fc_conv_ops = true;
   }
   if (advanced_settings != AdvancedSettings()) {
-    engine_settings.GetMutableMainExecutorSettings().SetAdvancedSettings(
-        advanced_settings);
+    engine_settings.GetMutableMainExecutorSettings()
+        .GetMutableAdvancedSettings() = advanced_settings;
   }
 
   ABSL_LOG(INFO) << "executor_settings: "

@@ -197,16 +197,13 @@ absl::Status EngineSettings::MaybeUpdateAndValidate(
   }
 
   if (num_prompt_tokens > 0) {
-    AdvancedSettings advanced_settings;
-    if (main_executor_settings_.GetAdvancedSettings()) {
-      advanced_settings = *main_executor_settings_.GetAdvancedSettings();
-    }
+    auto& advanced_settings =
+        main_executor_settings_.GetMutableAdvancedSettings();
     if (advanced_settings.prefill_batch_sizes.empty()) {
       // If the prefill batch size is not set, set it to the number of tokens
       // in the input prompt with some margin.
       advanced_settings.prefill_batch_sizes.insert(
           num_prompt_tokens + kDefaultPrefillBatchSizeMargin);
-      main_executor_settings_.SetAdvancedSettings(advanced_settings);
     }
   }
 
@@ -239,24 +236,20 @@ absl::Status EngineSettings::MaybeUpdateAndValidate(
 
   // Set allow_src_quantized_fc_conv_ops to default values depending on the
   // model type if it is not set.
-  auto advanced_settings = AdvancedSettings();
-  if (main_executor_settings_.GetAdvancedSettings()) {
-    advanced_settings = *main_executor_settings_.GetAdvancedSettings();
-  }
+  auto& advanced_settings =
+      main_executor_settings_.GetMutableAdvancedSettings();
   if (!advanced_settings.allow_src_quantized_fc_conv_ops.has_value()) {
     // Disable src quantized fc conv ops for generic models. If it's well-known,
     // the quality is acceptable with int8 quantized fc/conv ops.
     advanced_settings.allow_src_quantized_fc_conv_ops =
         metadata.has_llm_model_type() &&
         !metadata.llm_model_type().has_generic_model();
-    main_executor_settings_.SetAdvancedSettings(advanced_settings);
   }
 
   // TODO: b/482450588 - Remove this once the bug is fixed.
   if (metadata.has_llm_model_type() &&
       metadata.llm_model_type().has_function_gemma()) {
     advanced_settings.convert_weights_on_gpu = false;
-    main_executor_settings_.SetAdvancedSettings(advanced_settings);
   }
 
   if (!metadata.has_jinja_prompt_template()) {

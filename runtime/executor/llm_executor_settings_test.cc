@@ -257,7 +257,7 @@ TEST(LlmExecutorConfigTest, LlmExecutorSettingsWithAdvancedSettings) {
   (*settings).SetActivationDataType(ActivationDataType::FLOAT16);
   (*settings).SetMaxNumImages(1);
   (*settings).SetCacheDir(std::string(kPathToCache));
-  (*settings).SetAdvancedSettings(AdvancedSettings{
+  (*settings).GetMutableAdvancedSettings() = AdvancedSettings{
       .prefill_batch_sizes = {128, 256},
       .num_output_candidates = 3,
       .configure_magic_numbers = true,
@@ -274,7 +274,7 @@ TEST(LlmExecutorConfigTest, LlmExecutorSettingsWithAdvancedSettings) {
       .share_constant_tensors = false,
       .sampler_handles_input = false,
       .allow_src_quantized_fc_conv_ops = true,
-  });
+  };
 
   std::stringstream oss;
   oss << (*settings);
