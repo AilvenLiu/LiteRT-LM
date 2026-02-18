@@ -250,12 +250,12 @@ LiteRtLmConversationConfig* litert_lm_conversation_config_create(
     }
   }
 
-  auto conversation_config = litert::lm::ConversationConfig::Builder()
-                                 .SetSessionConfig(*config_to_use)
-                                 .SetPreface(json_preface)
-                                 .SetEnableConstrainedDecoding(
-                                     enable_constrained_decoding)
-                                 .Build(*engine->engine);
+  auto conversation_config =
+      litert::lm::ConversationConfig::Builder()
+          .SetSessionConfig(*config_to_use)
+          .SetPreface(json_preface)
+          .SetEnableConstrainedDecoding(enable_constrained_decoding)
+          .Build(*engine->engine);
 
   if (!conversation_config.ok()) {
     ABSL_LOG(ERROR) << "Failed to create conversation config: "
@@ -321,13 +321,16 @@ LiteRtLmEngineSettings* litert_lm_engine_settings_create(
     auto& executor_settings = engine_settings->GetMutableMainExecutorSettings();
     executor_settings.SetActivationDataType(
         litert::lm::ActivationDataType::FLOAT32);
-    executor_settings.SetAdvancedSettings({
-        .allow_src_quantized_fc_conv_ops = false});
+    executor_settings.SetAdvancedSettings(
+        {.allow_src_quantized_fc_conv_ops = false});
   }
 
   auto* c_settings = new LiteRtLmEngineSettings;
   c_settings->settings =
       std::make_unique<EngineSettings>(*std::move(engine_settings));
+
+  c_settings->settings->GetMutableMainExecutorSettings().SetCacheDir(
+      ":nocache");
   return c_settings;
 }
 
