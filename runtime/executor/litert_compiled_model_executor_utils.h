@@ -65,8 +65,12 @@ struct ModelSignatures {
   std::optional<std::string> input_per_layer_embeddings;
   // Input int32 param signature name. For both prefill and decode.
   std::optional<std::string> input_int32_param;
+  // Input output logits signature name. For decode (MTP).
+  std::optional<std::string> input_logits;
   // Output logits signature name. Necessary for decode.
   std::string output_logits;
+  // Verify signature name.
+  std::optional<std::string> signature_verify;
 };
 
 // Get the corresponding ModelSignatures struct for the given model using
@@ -110,6 +114,12 @@ absl::StatusOr<SortedPrefillSignatureMap> GetPrefillRunnerSetFromModel(
 absl::StatusOr<std::vector<std::pair<std::string, int>>>
 GetOptimizedPrefillWorkGroups(
     const SortedPrefillSignatureMap& prefill_runner_set, int input_length);
+
+// Returns the key of the verify signature if it exists in the model.
+// The verify signature follows the "decode_<chunk_size>" naming convention,
+// e.g., "decode_4" for a target chunk size of 4.
+absl::StatusOr<std::string> GetVerifySignatureName(const ::litert::Model& model,
+                                                   int target_chunk_size);
 
 // Initializes the attention mask tensor for prefill/decode.
 // The mask is a 4D tensor with shape [batch=1, seq_len, 1, max_kv_len].

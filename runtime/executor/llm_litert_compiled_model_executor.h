@@ -141,7 +141,8 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
       std::string weight_cache_path,
       std::unique_ptr<EmbeddingLookupManager> embedding_lookup,
       std::unique_ptr<EmbeddingLookupManager> per_layer_embedding_lookup,
-      bool use_fp16_precision, LogitsDataType logits_data_type)
+      bool use_fp16_precision, LogitsDataType logits_data_type,
+      std::unique_ptr<CompiledModel> mtp_drafter_model)
       : executor_settings_(std::move(executor_settings)),
         env_(env),
         model_(*model),
@@ -159,7 +160,8 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
         embedding_lookup_(std::move(embedding_lookup)),
         per_layer_embedding_lookup_(std::move(per_layer_embedding_lookup)),
         use_fp16_precision_(use_fp16_precision),
-        logits_data_type_(logits_data_type) {
+        logits_data_type_(logits_data_type),
+        mtp_drafter_model_(std::move(mtp_drafter_model)) {
     auto processed_context = std::make_unique<LlmProcessedContext>(
         std::nullopt, absl::flat_hash_map<absl::string_view, TensorBuffer>(),
         ProcessedTokens());
@@ -187,6 +189,11 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
   // Samples output logits and write to ids_tensor.
   absl::Status SampleLogits(const TensorBuffer& logits,
                             TensorBuffer& ids_tensor);
+
+  // Samples output logits, writes to output_tokens, handles negative token IDs,
+  // and adds tokens to the pending input state.
+  absl::Status SampleAndAddPendingToken(const TensorBuffer& output_logits,
+                                        TensorBuffer& output_tokens);
 
   // Prefill internal implementation, for one prefill call to the Interpreter
   // with a certain length synchronously or asynchronously.
@@ -311,6 +318,9 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
 
   // GPU optimized single buffer cache
   bool gpu_optimized_single_buffer_cache_ = false;
+
+  // The MTP drafter model.
+  std::unique_ptr<CompiledModel> mtp_drafter_model_;
 };
 
 // The static executor for the prefill-decode compiled model.
@@ -326,6 +336,10 @@ class LlmLiteRtCompiledModelExecutorStatic
 
   absl::Status Prefill(const ExecutorInputs& inputs,
                        const ExecutorPrefillParams& params) override;
+
+  using LlmLiteRtCompiledModelExecutorBase::Decode;
+  absl::Status Decode(::litert::TensorBuffer& output_tokens,
+                      const ExecutorDecodeParams& decode_params) override;
 
  private:
   LlmLiteRtCompiledModelExecutorStatic(
@@ -349,7 +363,10 @@ class LlmLiteRtCompiledModelExecutorStatic
       std::unique_ptr<EmbeddingLookupManager> per_layer_embedding_lookup =
           nullptr,
       bool use_fp16_precision = true,
-      LogitsDataType logits_data_type = LogitsDataType::FLOAT32)
+      LogitsDataType logits_data_type = LogitsDataType::FLOAT32,
+      std::unique_ptr<CompiledModel> mtp_drafter_model = nullptr,
+      ModelSignatures mtp_drafter_signatures = ModelSignatures(),
+      std::string mtp_drafter_signature_key = "")
       : LlmLiteRtCompiledModelExecutorBase(
             std::move(executor_settings), env, model, std::move(compiled_model),
             std::move(decode_input_buffers), std::move(decode_output_buffers),
@@ -359,8 +376,10 @@ class LlmLiteRtCompiledModelExecutorStatic
             std::move(decode_output_kv_cache_buffers), signatures,
             output_batch_size, std::move(weight_cache_path),
             std::move(embedding_lookup), std::move(per_layer_embedding_lookup),
-            use_fp16_precision, logits_data_type),
-        prefill_signature_map_(std::move(prefill_signature_map)) {}
+            use_fp16_precision, logits_data_type, std::move(mtp_drafter_model)),
+        prefill_signature_map_(std::move(prefill_signature_map)),
+        mtp_drafter_signatures_(std::move(mtp_drafter_signatures)),
+        mtp_drafter_signature_key_(std::move(mtp_drafter_signature_key)) {}
 
   SortedPrefillSignatureMap prefill_signature_map_;
   // Signature names are unique across all signatures in a model so it is safe
@@ -369,6 +388,52 @@ class LlmLiteRtCompiledModelExecutorStatic
       std::string /*prefill_signature_name*/,
       absl::flat_hash_map<absl::string_view /*input_name*/, TensorBuffer>>
       prefill_input_buffers_;
+
+  // Extracted logic for decoding with MTP drafter model.
+  absl::Status DecodeWithDraft(::litert::TensorBuffer& output_tokens,
+                               const ExecutorDecodeParams& decode_params);
+
+  // Validates if the MTP drafter signatures are valid.
+  absl::Status ValidateMtpDrafterSignatures();
+
+  // Runs the drafter model for `num_drafts` steps.
+  // `current_logits` is the logits from the previous step.
+  // `num_drafts` is the number of tokens to draft.
+  // `start_step` is the current step of the main model.
+  // Returns the drafted tokens.
+  absl::StatusOr<std::vector<int>> RunDrafterStep(
+      const ::litert::TensorBuffer& current_logits, int num_drafts,
+      int start_step);
+
+  // Runs the verification step for the drafted tokens.
+  // `drafted_tokens` are the tokens drafted by the drafter model.
+  // `output_tokens` contains the base token (the last true token).
+  // Returns the sequence of accepted tokens (including the base token and
+  // accepted drafted tokens).
+  absl::StatusOr<std::vector<int>> RunVerification(
+      const std::vector<int>& drafted_tokens,
+      ::litert::TensorBuffer& output_tokens,
+      absl::string_view signature_verify);
+
+  // Discovers and initializes MTP drafter signatures from the model.
+  static absl::StatusOr<std::pair<ModelSignatures, std::string>>
+  DiscoverMtpDrafterSignatures(const CompiledModel& mtp_drafter_compiled_model);
+
+  // The signatures of the MTP drafter model.
+  ModelSignatures mtp_drafter_signatures_;
+  // The signature key of the MTP drafter model.
+  std::string mtp_drafter_signature_key_;
+
+  // Buffers for MTP drafter model execution.
+  // These are lazily initialized within RunDrafterStep on their first use
+  // and reused in subsequent calls to minimize allocation overhead.
+  absl::flat_hash_map<absl::string_view, TensorBuffer> drafter_inputs_;
+  absl::flat_hash_map<absl::string_view, TensorBuffer> drafter_output_buffers_;
+  std::optional<TensorBuffer> drafter_output_ids_;
+
+  // MTP telemetry counters.
+  int total_drafted_tokens_ = 0;
+  int total_accepted_tokens_ = 0;
 };
 
 // The dynamic executor for the prefill-decode compiled model.
@@ -403,7 +468,9 @@ class LlmLiteRtCompiledModelExecutorDynamic
       std::unique_ptr<EmbeddingLookupManager> per_layer_embedding_lookup =
           nullptr,
       bool use_fp16_precision = true,
-      LogitsDataType logits_data_type = LogitsDataType::FLOAT32)
+      LogitsDataType logits_data_type = LogitsDataType::FLOAT32,
+      std::unique_ptr<CompiledModel> mtp_drafter_model = nullptr,
+      ModelSignatures mtp_drafter_signatures = ModelSignatures())
       : LlmLiteRtCompiledModelExecutorBase(
             std::move(executor_settings), env, model, std::move(compiled_model),
             std::move(decode_input_buffers), std::move(decode_output_buffers),
@@ -413,7 +480,7 @@ class LlmLiteRtCompiledModelExecutorDynamic
             /*decode_output_kv_cache_buffers=*/std::nullopt, signatures,
             output_batch_size, std::move(weight_cache_path),
             std::move(embedding_lookup), std::move(per_layer_embedding_lookup),
-            use_fp16_precision, logits_data_type),
+            use_fp16_precision, logits_data_type, std::move(mtp_drafter_model)),
         prefill_chunk_size_(prefill_chunk_size),
         key_dynamic_dim_index_(key_dynamic_dim_index),
         value_dynamic_dim_index_(value_dynamic_dim_index),

@@ -117,8 +117,11 @@ struct AdvancedSettings {
   // the graph has dynamic prefill lengths.
   std::set<int> prefill_batch_sizes;
 
-  // The number of output candidates, or the decode batch size.
-  int num_output_candidates = 1;
+  // The number of tokens to output.
+  // This is used for speculative decoding.
+  uint32_t num_output_candidates = 1;
+  // The number of draft tokens to generate for MTP.
+  uint32_t num_drafts = 3;
 
   // Whether to configure magic numbers when the model contains magic numbers.
   // Magic number for the context length will be replaced with max_num_tokens_

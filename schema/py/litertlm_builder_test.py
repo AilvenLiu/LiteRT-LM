@@ -158,7 +158,11 @@ class LitertlmBuilderTest(parameterized.TestCase):
     with self.assertRaises(AssertionError):
       builder.add_llm_metadata(metadata_path)
 
-  def test_add_tflite_model(self):
+  @parameterized.named_parameters(
+      ("prefill_decode", litertlm_builder.TfLiteModelType.PREFILL_DECODE),
+      ("mtp_drafter", litertlm_builder.TfLiteModelType.MTP_DRAFTER),
+  )
+  def test_add_tflite_model_types(self, model_type):
     """Tests that a TFLite model can be added correctly."""
     tflite_path = self._create_dummy_file(
         "model.tflite", b"dummy tflite content"
@@ -168,7 +172,7 @@ class LitertlmBuilderTest(parameterized.TestCase):
     self._add_system_metadata(builder)
     builder.add_tflite_model(
         tflite_path,
-        litertlm_builder.TfLiteModelType.PREFILL_DECODE,
+        model_type,
         additional_metadata=[
             litertlm_builder.Metadata(
                 key="test_key",
@@ -180,7 +184,7 @@ class LitertlmBuilderTest(parameterized.TestCase):
     ss = self._build_and_read_litertlm(builder)
     self.assertIn("Sections (1)", ss)
     self.assertIn("Data Type:    TFLiteModel", ss)
-    self.assertIn("Key: model_type, Value (String): tf_lite_prefill_decode", ss)
+    self.assertIn(f"Key: model_type, Value (String): {model_type.value}", ss)
     self.assertIn("Key: test_key, Value (String): test_value", ss)
 
   def test_add_tflite_model_with_backend_constraint(self):

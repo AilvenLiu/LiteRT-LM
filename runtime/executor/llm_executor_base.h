@@ -49,14 +49,21 @@ class LlmExecutorBase {
   };
 
   // ------------Output APIs------------:
-  // Basic API to trigger the "decode" process. On success, fills output tokens
-  // tensor buffer of shape `[batch, sequence_length]` of int32_t.
+  // Basic API to trigger the "decode" process.
+  //
+  // Output tokens are written to the `output_tokens` buffer.
+  // NOTE: If the provided buffer has insufficient capacity, it will be
+  // replaced with a new, larger TensorBuffer instance via move-assignment.
   virtual absl::Status Decode(::litert::TensorBuffer& output_tokens) = 0;
 
   // Advanced API to trigger the decode and sampling process with custom
-  // parameters. On success, fills output tokens tensor buffer of shape `[batch,
-  // sequence_length]` of int32_t. decode_params: Parameters to control the
-  // decode process.
+  // parameters.
+  //
+  // Output tokens are written to the `output_tokens` buffer.
+  // NOTE: If the provided buffer has insufficient capacity, it will be
+  // replaced with a new, larger TensorBuffer instance via move-assignment.
+  //
+  // decode_params: Parameters to control the decode process.
   virtual absl::Status Decode(::litert::TensorBuffer& output_tokens,
                               const ExecutorDecodeParams& decode_params) {
     return absl::UnimplementedError(

@@ -211,7 +211,8 @@ absl::StatusOr<EngineSettings> CreateEngineSettings(
 
   AdvancedSettings advanced_settings{
       .prefill_batch_sizes = settings.prefill_batch_sizes,
-      .num_output_candidates = settings.num_output_candidates,
+      .num_output_candidates =
+          static_cast<uint32_t>(settings.num_output_candidates),
       .configure_magic_numbers = settings.configure_magic_numbers,
       .verify_magic_numbers = settings.verify_magic_numbers,
       .clear_kv_cache_before_prefill = settings.clear_kv_cache_before_prefill,

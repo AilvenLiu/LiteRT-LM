@@ -85,6 +85,9 @@ constexpr int kDynamicDimValue = -1;
 constexpr int kDefaultNumThreadsToUpload = 2;
 constexpr int kDefaultNumThreadsToCompile = 1;
 
+// Default number of drafting steps for MTP.
+constexpr int kDefaultNumDrafts = 3;
+
 absl::Status InitializeEmbeddingLookups(
     ModelResources& resources,
     std::unique_ptr<EmbeddingLookupManager>& embedding_lookup,
@@ -1105,19 +1108,33 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::Decode(
   return Decode(output_tokens, ExecutorDecodeParams());
 }
 
-absl::Status LlmLiteRtCompiledModelExecutorBase::Decode(
-    TensorBuffer& output_tokens, const ExecutorDecodeParams& decode_params) {
-
-  ASSIGN_OR_RETURN(auto decoded_logits,
-                   DecodeLogits(ExecutorInputs(), decode_params));
-  RETURN_IF_ERROR(SampleLogits(decoded_logits, output_tokens));
-
+absl::Status LlmLiteRtCompiledModelExecutorBase::SampleAndAddPendingToken(
+    const TensorBuffer& output_logits, TensorBuffer& output_tokens) {
+  // Check if output_tokens needs resizing for 1 token.
   LITERT_ASSIGN_OR_RETURN(auto output_tokens_size, output_tokens.PackedSize());
   int output_heads = 1;
   if (llm_context_->runtime_config().output_heads.has_value()) {
     output_heads = llm_context_->runtime_config().output_heads.value();
   }
-  RET_CHECK_EQ(output_tokens_size, output_heads * sizeof(int32_t));
+  auto buffer_type = output_tokens.BufferType();
+  if (buffer_type && *buffer_type == ::litert::TensorBufferType::kHostMemory) {
+    if (output_tokens_size < output_heads * sizeof(int32_t)) {
+      LITERT_ASSIGN_OR_RETURN(
+          auto new_output_tokens,
+          litert::TensorBuffer::CreateManagedHostMemory(
+              litert::RankedTensorType(
+                  litert::ElementType::Int32,
+                  litert::Layout({1, output_heads},
+                                 {static_cast<uint32_t>(output_heads), 1})),
+              output_heads * sizeof(int32_t)));
+      output_tokens = std::move(new_output_tokens);
+    }
+  } else {
+    RET_CHECK(output_tokens_size >= output_heads * sizeof(int32_t))
+        << "Provided non-host memory token buffer is too small.";
+  }
+
+  RETURN_IF_ERROR(SampleLogits(output_logits, output_tokens));
 
   bool has_invalid_output_token = false;
   {
@@ -1141,18 +1158,36 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::Decode(
   if (has_invalid_output_token) {
     ABSL_LOG(WARNING) << "Invalid decode and sample result. The sampled token "
                          "is casted to 0 to avoid crash.";
-    LITERT_ASSIGN_OR_RETURN(
-        auto lock_and_addr,
-        TensorBufferScopedLock::Create(output_tokens,
-                                       TensorBuffer::LockMode::kReadWrite));
+    LITERT_ASSIGN_OR_RETURN(auto new_lock_and_addr,
+                            TensorBufferScopedLock::Create(
+                                output_tokens, TensorBuffer::LockMode::kWrite));
     auto output_token_span = absl::MakeSpan(
-        static_cast<int32_t*>(lock_and_addr.second), output_heads);
+        static_cast<int32_t*>(new_lock_and_addr.second), output_heads);
     for (auto& tid : output_token_span) {
       if (tid < 0) {
         tid = 0;
       }
     }
   }
+
+  return absl::OkStatus();
+}
+
+absl::Status LlmLiteRtCompiledModelExecutorBase::Decode(
+    ::litert::TensorBuffer& output_tokens,
+    const ExecutorDecodeParams& decode_params) {
+
+  ASSIGN_OR_RETURN(auto decoded_logits,
+                   DecodeLogits(ExecutorInputs(), decode_params));
+
+  RETURN_IF_ERROR(SampleAndAddPendingToken(decoded_logits, output_tokens));
+
+  const auto& settings = executor_settings_.GetAdvancedSettings();
+  if (settings && settings->num_logits_to_print_after_decode > 0) {
+    LogTensor(decoded_logits, settings->num_logits_to_print_after_decode,
+              "Logits");
+  }
+
   return absl::OkStatus();
 }
 
@@ -1256,6 +1291,309 @@ absl::StatusOr<TensorBuffer> LlmLiteRtCompiledModelExecutorBase::DecodeLogits(
   }
   return output_logits;
 }
+
+absl::Status
+LlmLiteRtCompiledModelExecutorStatic::ValidateMtpDrafterSignatures() {
+  if (!mtp_drafter_model_) {
+    return absl::OkStatus();
+  }
+  if (mtp_drafter_signature_key_.empty()) {
+    return absl::InternalError(
+        "MTP drafter model loaded but no signature key found.");
+  }
+  if (mtp_drafter_signatures_.output_logits.empty()) {
+    return absl::InternalError("MTP drafter signature missing output logits.");
+  }
+  if (!mtp_drafter_signatures_.input_logits.has_value()) {
+    return absl::InternalError("MTP drafter signature missing input logits.");
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::vector<int>>
+LlmLiteRtCompiledModelExecutorStatic::RunDrafterStep(
+    const ::litert::TensorBuffer& current_logits, int num_drafts,
+    int start_step) {
+  std::vector<int> drafted_tokens;
+  drafted_tokens.reserve(num_drafts);
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer>& drafter_inputs =
+      drafter_inputs_;
+
+  // Lazily create input buffers on first use.
+  if (!drafter_inputs.contains(*mtp_drafter_signatures_.input_logits)) {
+    LITERT_ASSIGN_OR_RETURN(
+        auto logits_input_buffer,
+        mtp_drafter_model_->CreateInputBuffer(
+            mtp_drafter_signature_key_, *mtp_drafter_signatures_.input_logits));
+    drafter_inputs[*mtp_drafter_signatures_.input_logits] =
+        std::move(logits_input_buffer);
+  }
+
+  // Lazily create output buffers on first use.
+  auto* logits_buffer_ptr =
+      &drafter_inputs[*mtp_drafter_signatures_.input_logits];
+
+  // Lazily create position buffer on first use.
+  TensorBuffer* position_buffer_ptr = nullptr;
+  if (!mtp_drafter_signatures_.input_positions.empty()) {
+    if (!drafter_inputs.contains(mtp_drafter_signatures_.input_positions)) {
+      LITERT_ASSIGN_OR_RETURN(auto buffer,
+                              mtp_drafter_model_->CreateInputBuffer(
+                                  mtp_drafter_signature_key_,
+                                  mtp_drafter_signatures_.input_positions));
+      drafter_inputs[mtp_drafter_signatures_.input_positions] =
+          std::move(buffer);
+    }
+    position_buffer_ptr =
+        &drafter_inputs[mtp_drafter_signatures_.input_positions];
+  }
+
+  // Initial logits copy.
+  LITERT_RETURN_IF_ERROR(CopyBuffer(current_logits, *logits_buffer_ptr));
+
+  // Lazily create output buffers on first use.
+  if (!drafter_output_buffers_.contains(
+          mtp_drafter_signatures_.output_logits)) {
+    LITERT_ASSIGN_OR_RETURN(
+        auto output_logits,
+        mtp_drafter_model_->CreateOutputBuffer(
+            mtp_drafter_signature_key_, mtp_drafter_signatures_.output_logits));
+    drafter_output_buffers_[mtp_drafter_signatures_.output_logits] =
+        std::move(output_logits);
+  }
+
+  // Lazily create output ids buffer on first use.
+  if (!drafter_output_ids_.has_value()) {
+    LITERT_ASSIGN_OR_RETURN(
+        auto output_ids,
+        litert::TensorBuffer::CreateManagedHostMemory(
+            litert::RankedTensorType(litert::ElementType::Int32,
+                                     litert::Layout({1, 1}, {1, 1})),
+            1 * sizeof(int32_t)));
+    drafter_output_ids_ = std::move(output_ids);
+  }
+
+  for (int i = 0; i < num_drafts; ++i) {
+    // Update position if needed.
+    if (position_buffer_ptr) {
+      int32_t current_pos = start_step + i;
+      LITERT_RETURN_IF_ERROR(position_buffer_ptr->Write<int32_t>(
+          absl::Span<const int32_t>(&current_pos, 1)));
+    }
+
+    // Run drafter.
+    LITERT_RETURN_IF_ERROR(mtp_drafter_model_->Run(
+        mtp_drafter_signature_key_, drafter_inputs, drafter_output_buffers_));
+
+    // Get output logits.
+    auto& current_output_logits =
+        drafter_output_buffers_[mtp_drafter_signatures_.output_logits];
+
+    // Sample.
+    LITERT_RETURN_IF_ERROR(
+        SampleLogits(current_output_logits, *drafter_output_ids_));
+    auto output_ids_span = ReferTensorBufferAsSpan<int>(*drafter_output_ids_);
+    int drafted_token = (*output_ids_span)[0];
+    drafted_tokens.push_back(drafted_token);
+
+    // Update logits input for next step to enable autoregressive drafting.
+    if (i < num_drafts - 1) {
+      LITERT_RETURN_IF_ERROR(
+          CopyBuffer(current_output_logits, *logits_buffer_ptr));
+    }
+  }
+
+  return drafted_tokens;
+}
+
+absl::StatusOr<std::vector<int>>
+LlmLiteRtCompiledModelExecutorStatic::RunVerification(
+    const std::vector<int>& drafted_tokens,
+    ::litert::TensorBuffer& output_tokens, absl::string_view signature_verify) {
+  auto output_tokens_span = ReferTensorBufferAsSpan<int>(output_tokens);
+  int base_token = (*output_tokens_span)[0];
+
+  std::vector<int> verify_tokens_vec;
+  verify_tokens_vec.reserve(1 + drafted_tokens.size());
+  verify_tokens_vec.push_back(base_token);
+  verify_tokens_vec.insert(verify_tokens_vec.end(), drafted_tokens.begin(),
+                           drafted_tokens.end());
+
+  LITERT_ASSIGN_OR_RETURN(
+      auto verify_tokens_buffer,
+      CopyToTensorBuffer<int>(absl::MakeSpan(verify_tokens_vec),
+                              {1, (int)verify_tokens_vec.size()}));
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> verify_inputs;
+  verify_inputs[signatures_.input_tokens] = std::move(verify_tokens_buffer);
+
+  for (auto& [name, buffer] : *input_kv_cache_buffers_) {
+    LITERT_ASSIGN_OR_RETURN(auto duplicated_buffer, buffer.Duplicate());
+    verify_inputs[name] = std::move(duplicated_buffer);
+  }
+
+  LITERT_RETURN_IF_ERROR(
+      compiled_model_.Run(signature_verify, verify_inputs, {}));
+
+  LITERT_ASSIGN_OR_RETURN(TensorBuffer verify_logits,
+                          compiled_model_.CreateOutputBuffer(
+                              signature_verify, signatures_.output_logits));
+
+  std::vector<int> accepted_tokens;
+  accepted_tokens.push_back(base_token);
+
+  LITERT_ASSIGN_OR_RETURN(litert::RankedTensorType verify_logits_type,
+                          verify_logits.TensorType());
+  int vocab_size = verify_logits_type.Layout().Dimensions().back();
+  auto element_width_opt =
+      litert::GetByteWidth(verify_logits_type.ElementType());
+  RET_CHECK(element_width_opt.has_value())
+      << "Cannot determine byte width for the element type.";
+  int element_size = *element_width_opt;
+
+  LITERT_ASSIGN_OR_RETURN(void* verify_logits_ptr, verify_logits.Lock());
+  char* verify_logits_data = static_cast<char*>(verify_logits_ptr);
+
+  bool all_accepted = true;
+  auto* processed_tokens_ptr =
+      &llm_context_->processed_context().processed_tokens();
+
+  LITERT_ASSIGN_OR_RETURN(
+      auto output_ids,
+      litert::TensorBuffer::CreateManagedHostMemory(
+          litert::RankedTensorType(litert::ElementType::Int32,
+                                   litert::Layout({1, 1}, {1, 1})),
+          1 * sizeof(int32_t)));
+
+  litert::RankedTensorType current_logits_type(
+      verify_logits_type.ElementType(),
+      litert::Layout({1, 1, vocab_size},
+                     {1, static_cast<uint32_t>(vocab_size), 1}));
+
+  for (int i = 0; i < drafted_tokens.size(); ++i) {
+    // Extract logits for position i to verify draft token i.
+    // We create a TensorBuffer view into the large verify_logits tensor
+    // to avoid copying data for each sampling step.
+    LITERT_ASSIGN_OR_RETURN(
+        auto current_logits,
+        litert::TensorBuffer::CreateFromHostMemory(
+            current_logits_type,
+            verify_logits_data + i * vocab_size * element_size,
+            vocab_size * element_size));
+
+    LITERT_RETURN_IF_ERROR(SampleLogits(current_logits, output_ids));
+    auto output_ids_span = ReferTensorBufferAsSpan<int>(output_ids);
+    int verified_id = (*output_ids_span)[0];
+
+    if (verified_id == drafted_tokens[i]) {
+      accepted_tokens.push_back(verified_id);
+      LITERT_RETURN_IF_ERROR(processed_tokens_ptr->AddPendingInputToken(
+          {std::make_shared<TokenData>(verified_id)}));
+      LITERT_RETURN_IF_ERROR(
+          SetCurrentStep(llm_context_->runtime_state().current_step + 1));
+    } else {
+      all_accepted = false;
+      // Mismatch. Stop here.
+      accepted_tokens.push_back(verified_id);
+      LITERT_RETURN_IF_ERROR(processed_tokens_ptr->AddPendingInputToken(
+          {std::make_shared<TokenData>(verified_id)}));
+      // Rollback the step.
+      LITERT_RETURN_IF_ERROR(
+          SetCurrentStep(llm_context_->runtime_state().current_step + 1));
+      break;
+    }
+  }
+
+  if (all_accepted) {
+    // Sample one more token from the last logits.
+    LITERT_ASSIGN_OR_RETURN(
+        auto current_logits,
+        litert::TensorBuffer::CreateFromHostMemory(
+            current_logits_type,
+            verify_logits_data +
+                drafted_tokens.size() * vocab_size * element_size,
+            vocab_size * element_size));
+
+    LITERT_RETURN_IF_ERROR(SampleLogits(current_logits, output_ids));
+    auto output_ids_span = ReferTensorBufferAsSpan<int>(output_ids);
+    int next_token = (*output_ids_span)[0];
+    accepted_tokens.push_back(next_token);
+    LITERT_RETURN_IF_ERROR(processed_tokens_ptr->AddPendingInputToken(
+        {std::make_shared<TokenData>(next_token)}));
+    LITERT_RETURN_IF_ERROR(
+        SetCurrentStep(llm_context_->runtime_state().current_step + 1));
+  }
+
+  LITERT_RETURN_IF_ERROR(verify_logits.Unlock());
+
+  return accepted_tokens;
+}
+
+absl::Status LlmLiteRtCompiledModelExecutorStatic::Decode(
+    ::litert::TensorBuffer& output_tokens,
+    const ExecutorDecodeParams& decode_params) {
+  if (!mtp_drafter_model_) {
+    return LlmLiteRtCompiledModelExecutorBase::Decode(output_tokens,
+                                                      decode_params);
+  }
+  return DecodeWithDraft(output_tokens, decode_params);
+}
+
+absl::Status LlmLiteRtCompiledModelExecutorStatic::DecodeWithDraft(
+    ::litert::TensorBuffer& output_tokens,
+    const ExecutorDecodeParams& decode_params) {
+
+  LITERT_ASSIGN_OR_RETURN(
+      TensorBuffer output_logits,
+      compiled_model_.CreateOutputBuffer(kDecodeSignatureRunner,
+                                         signatures_.output_logits));
+  LITERT_RETURN_IF_ERROR(PrepareFirstDecode());
+  LITERT_ASSIGN_OR_RETURN(auto step_and_token,
+                          GetTokenToDecode(ExecutorInputs()));
+  LITERT_RETURN_IF_ERROR(DecodeInternal(step_and_token.token, output_logits));
+  LITERT_RETURN_IF_ERROR(
+      ConsumePendingOrAddProcessedToken(step_and_token.token));
+  LITERT_RETURN_IF_ERROR(
+      SetCurrentStep(llm_context_->runtime_state().current_step + 1));
+
+  LITERT_RETURN_IF_ERROR(
+      SampleAndAddPendingToken(output_logits, output_tokens));
+
+  const auto& settings = executor_settings_.GetAdvancedSettings();
+  if (settings && settings->num_logits_to_print_after_decode > 0) {
+    LogTensor(output_logits, settings->num_logits_to_print_after_decode,
+              "Logits");
+  }
+
+  LITERT_RETURN_IF_ERROR(ValidateMtpDrafterSignatures());
+
+  int num_drafts = settings ? settings->num_drafts : kDefaultNumDrafts;
+  int target_chunk_size = num_drafts + 1;  // Verification handles base + drafts
+
+  ASSIGN_OR_RETURN(std::string signature_verify,
+                   GetVerifySignatureName(model_, target_chunk_size));
+  LITERT_ASSIGN_OR_RETURN(
+      auto drafted_tokens,
+      RunDrafterStep(output_logits, num_drafts,
+                     llm_context_->runtime_state().current_step));
+  LITERT_ASSIGN_OR_RETURN(
+      auto verified_tokens,
+      RunVerification(drafted_tokens, output_tokens, signature_verify));
+
+  // Process accepted tokens and handle potential mismatches.
+  int accepted_count = verified_tokens.size() - 1;  // -1 for base token
+
+  // Telemetry to track drafted vs accepted tokens.
+  total_drafted_tokens_ += drafted_tokens.size();
+  total_accepted_tokens_ += accepted_count;
+  ABSL_LOG(INFO) << "MTP Drafter: Accepted " << accepted_count << " / "
+                 << drafted_tokens.size() << " tokens.";
+
+  return absl::OkStatus();
+}
+
+// static
 
 absl::Status LlmLiteRtCompiledModelExecutorBase::InitializeSampler(
     std::optional<ActivationDataType> logits_data_type) {
@@ -1481,12 +1819,52 @@ absl::Status LlmLiteRtCompiledModelExecutorStatic::Prefill(
 
 // static
 // Creates a LlmLiteRtCompiledModelExecutorStatic from a LiteRt model.
+absl::StatusOr<std::pair<ModelSignatures, std::string>>
+LlmLiteRtCompiledModelExecutorStatic::DiscoverMtpDrafterSignatures(
+    const CompiledModel& mtp_drafter_compiled_model) {
+  ModelSignatures mtp_drafter_signatures;
+  std::string mtp_drafter_signature_key;
+
+  LITERT_ASSIGN_OR_RETURN(auto signature_keys,
+                          mtp_drafter_compiled_model.GetSignatureKeys());
+  for (auto key : signature_keys) {
+    LITERT_ASSIGN_OR_RETURN(
+        auto input_names,
+        mtp_drafter_compiled_model.GetSignatureInputNames(key));
+    LITERT_ASSIGN_OR_RETURN(
+        auto output_names,
+        mtp_drafter_compiled_model.GetSignatureOutputNames(key));
+    auto signatures_or =
+        GetModelSignaturesFromInputOutputNames(input_names, output_names);
+    if (!signatures_or.ok()) continue;
+    const ModelSignatures& signatures = *signatures_or;
+    // We look for a signature that has both input logits and output logits.
+    if (!signatures.output_logits.empty() &&
+        signatures.input_logits.has_value()) {
+      mtp_drafter_signatures = signatures;
+      mtp_drafter_signature_key = std::string(key);
+      break;
+    }
+  }
+
+  if (mtp_drafter_signature_key.empty()) {
+    return absl::NotFoundError(
+        "MTP drafter model loaded but no valid MTP signature found (requires "
+        "input and output logits).");
+  }
+
+  return std::make_pair(mtp_drafter_signatures, mtp_drafter_signature_key);
+}
+
 absl::StatusOr<std::unique_ptr<LlmLiteRtCompiledModelExecutorStatic>>
 LlmLiteRtCompiledModelExecutorStatic::Create(
     LlmExecutorSettings executor_settings, Environment& lrt_env,
     ModelResources& resources) {
   ASSIGN_OR_RETURN(auto litert_model,
                    resources.GetTFLiteModel(ModelType::kTfLitePrefillDecode));
+  // Allow the MTP drafter model to be optional.
+  const Model* mtp_drafter_model =
+      resources.GetTFLiteModel(ModelType::kTfLiteMtpDrafter).value_or(nullptr);
   // For the LlmLiteRtCompiledModelExecutorStatic, ML_DRIFT backend is used by
   // default.
   // TODO(b/405424188): - Add support for NPU backends.
@@ -1749,6 +2127,28 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       auto compiled_model,
       CompiledModel::Create(lrt_env, litert_model->Get(), compilation_options));
 
+  std::unique_ptr<CompiledModel> mtp_drafter_compiled_model = nullptr;
+  ModelSignatures mtp_drafter_signatures;
+  std::string mtp_drafter_signature_key;
+
+  if (mtp_drafter_model != nullptr) {
+    LITERT_ASSIGN_OR_RETURN(
+        auto drafter_compiled_model,
+        CompiledModel::Create(lrt_env, mtp_drafter_model->Get(),
+                              compilation_options));
+    mtp_drafter_compiled_model =
+        std::make_unique<CompiledModel>(std::move(drafter_compiled_model));
+
+    auto discovery_result =
+        DiscoverMtpDrafterSignatures(*mtp_drafter_compiled_model);
+    if (discovery_result.ok()) {
+      mtp_drafter_signatures = discovery_result->first;
+      mtp_drafter_signature_key = discovery_result->second;
+    } else {
+      ABSL_LOG(WARNING) << discovery_result.status().message();
+    }
+  }
+
   absl::flat_hash_map<absl::string_view, TensorBuffer> decode_input_buffers;
   absl::flat_hash_map<absl::string_view, TensorBuffer> decode_output_buffers;
   absl::flat_hash_map<absl::string_view, TensorBuffer> input_kv_cache_buffers;
@@ -1905,7 +2305,9 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       std::move(decode_output_kv_cache_buffers), std::move(prefill_runner_set),
       signatures, batch_size, std::move(cache_path),
       std::move(embedding_lookup), std::move(per_layer_embedding_lookup),
-      use_fp16_precision, activation_data_type));
+      use_fp16_precision, activation_data_type,
+      std::move(mtp_drafter_compiled_model), std::move(mtp_drafter_signatures),
+      std::move(mtp_drafter_signature_key)));
 }
 
 /* ===========================================================================*/
@@ -2096,6 +2498,21 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
     ModelResources& resources) {
   ASSIGN_OR_RETURN(auto litert_model,
                    resources.GetTFLiteModel(ModelType::kTfLitePrefillDecode));
+  // Allow the MTP drafter model to be optional.
+  const Model* mtp_drafter_model =
+      resources.GetTFLiteModel(ModelType::kTfLiteMtpDrafter).value_or(nullptr);
+  ModelSignatures mtp_drafter_signatures;
+  if (mtp_drafter_model) {
+    if (auto decode_signature =
+            mtp_drafter_model->FindSignature(kDecodeSignatureRunner);
+        decode_signature.HasValue()) {
+      mtp_drafter_signatures =
+          GetModelSignaturesFromInputOutputNames(
+              decode_signature->InputNames(), decode_signature->OutputNames(),
+              /*strict=*/false)
+              .value_or(ModelSignatures());
+    }
+  }
   LITERT_ASSIGN_OR_RETURN(auto compilation_options, Options::Create());
   std::string weight_cache_path = executor_settings.GetCacheDir();
   const Backend backend = executor_settings.GetBackend();
@@ -2141,6 +2558,16 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
   LITERT_ASSIGN_OR_RETURN(
       auto compiled_model,
       CompiledModel::Create(lrt_env, litert_model->Get(), compilation_options));
+
+  std::unique_ptr<CompiledModel> mtp_drafter_compiled_model = nullptr;
+  if (mtp_drafter_model != nullptr) {
+    LITERT_ASSIGN_OR_RETURN(
+        auto drafter_compiled_model,
+        CompiledModel::Create(lrt_env, mtp_drafter_model->Get(),
+                              compilation_options));
+    mtp_drafter_compiled_model =
+        std::make_unique<CompiledModel>(std::move(drafter_compiled_model));
+  }
 
   absl::flat_hash_map<absl::string_view, TensorBuffer> decode_input_buffers;
   absl::flat_hash_map<absl::string_view, TensorBuffer> decode_output_buffers;
@@ -2221,7 +2648,9 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
       v_dynamic_dim, kv_increament_size, std::move(key_cache_input_names),
       std::move(value_cache_input_names), signatures, batch_size,
       std::move(weight_cache_path), std::move(embedding_lookup),
-      std::move(per_layer_embedding_lookup), /*use_fp16_precision=*/false));
+      std::move(per_layer_embedding_lookup), /*use_fp16_precision=*/false,
+      /*logits_data_type=*/LogitsDataType::FLOAT32,
+      std::move(mtp_drafter_compiled_model)));
 }
 
 }  // namespace litert::lm

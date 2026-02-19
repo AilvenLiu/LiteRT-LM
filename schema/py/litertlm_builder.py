@@ -110,6 +110,7 @@ class TfLiteModelType(enum.Enum):
   VISION_ADAPTER = "tf_lite_vision_adapter"
   END_OF_VISION = "tf_lite_end_of_vision"
   ARTISAN_TEXT_DECODER = "tf_lite_artisan_text_decoder"
+  MTP_DRAFTER = "tf_lite_mtp_drafter"
 
   @classmethod
   def get_enum_from_tf_free_value(cls, tf_free_value: str) -> "TfLiteModelType":

@@ -405,7 +405,9 @@ constexpr int kVocabSize = 16000;
 
 class TfLiteModelResources : public ModelResources {
  public:
-  explicit TfLiteModelResources(const ModelAssets& model_assets) {
+  explicit TfLiteModelResources(const ModelAssets& model_assets,
+                                bool with_mtp_drafter = false)
+      : with_mtp_drafter_(with_mtp_drafter) {
     LITERT_ASSIGN_OR_ABORT(auto path, model_assets.GetPath());
     LITERT_ASSIGN_OR_ABORT(model_, Model::CreateFromFile(std::string(path)));
   }
@@ -414,6 +416,14 @@ class TfLiteModelResources : public ModelResources {
   absl::StatusOr<const Model*> GetTFLiteModel(ModelType model_type) override {
     if (model_type == ModelType::kTfLitePrefillDecode) {
       return &model_;
+    }
+    if (model_type == ModelType::kTfLiteMtpDrafter) {
+      if (with_mtp_drafter_) {
+        // Reuse the same model for testing MTP drafter creation
+        return &model_;
+      } else {
+        return absl::NotFoundError("MTP Drafter model not found");
+      }
     }
     return absl::UnimplementedError("Unsupported model type");
   }
@@ -447,7 +457,27 @@ class TfLiteModelResources : public ModelResources {
 
  private:
   Model model_;
+  bool with_mtp_drafter_;
 };
+
+TEST(LlmLiteRtCompiledModelExecutorStaticTest,
+     CreateExecutorTest_WithMtpDrafter) {
+  const std::filesystem::path model_path =
+      std::filesystem::path(::testing::SrcDir()) /
+      "litert_lm/runtime/testdata/magic_test_decode_batch.tflite";
+  ASSERT_OK_AND_ASSIGN(auto model_assets,
+                       ModelAssets::Create(model_path.string()));
+  ASSERT_OK_AND_ASSIGN(auto executor_settings,
+                       LlmExecutorSettings::CreateDefault(model_assets));
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto env, Environment::Create(std::vector<Environment::Option>()));
+  TfLiteModelResources model_resources(model_assets,
+                                       /*with_mtp_drafter=*/true);
+  ASSERT_OK_AND_ASSIGN(auto executor,
+                       LlmLiteRtCompiledModelExecutorStatic::Create(
+                           std::move(executor_settings), env, model_resources));
+  EXPECT_TRUE(executor);
+}
 
 TEST(LlmLiteRtCompiledModelExecutorStaticTest, MultipleOutput_Decode) {
   const std::filesystem::path model_path =

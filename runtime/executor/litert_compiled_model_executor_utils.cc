@@ -29,6 +29,7 @@
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "absl/strings/match.h"  // from @com_google_absl
+#include "absl/strings/str_cat.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/cc/litert_element_type.h"  // from @litert
 #include "litert/cc/litert_expected.h"  // from @litert
@@ -139,6 +140,10 @@ absl::StatusOr<ModelSignatures> GetModelSignaturesFromInputOutputNames(
       model_signatures.input_int32_param = std::string(input_name);
       continue;
     }
+    if (absl::c_linear_search(kOutputLogitsNames, input_name)) {
+      model_signatures.input_logits = std::string(input_name);
+      continue;
+    }
   }
 
   for (auto output_name : output_names) {
@@ -227,6 +232,20 @@ absl::StatusOr<SortedPrefillSignatureMap> GetPrefillRunnerSetFromModel(
     }
   }
   return prefill_runner_set;
+}
+
+absl::StatusOr<std::string> GetVerifySignatureName(const ::litert::Model& model,
+                                                   int target_chunk_size) {
+  auto signatures = model.GetSignatures();
+
+  std::string target_name = absl::StrCat("decode_", target_chunk_size);
+  for (auto& signature : *signatures) {
+    if (signature.Key() == target_name) {
+      return target_name;
+    }
+  }
+  return absl::NotFoundError(absl::StrCat(
+      "Verify signature not found for target chunk size: ", target_chunk_size));
 }
 
 absl::StatusOr<std::vector<std::pair<std::string, int>>>
