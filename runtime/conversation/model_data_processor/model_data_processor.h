@@ -162,9 +162,15 @@ class TypeSafeModelDataProcessor : public ModelDataProcessor {
   virtual const ExpectedConfigT& GetConfig() const = 0;
 
   // Clones the state of the other model data processor.
-  absl::Status CloneState(
-      const TypeSafeModelDataProcessor<ExpectedConfigT, ExpectedArgsT>& other) {
-    return this->CloneStateImpl(other);
+  absl::Status CloneState(const ModelDataProcessor& other) override {
+    const auto* typed_other = dynamic_cast<
+        const TypeSafeModelDataProcessor<ExpectedConfigT, ExpectedArgsT>*>(
+        &other);
+    if (!typed_other) {
+      return absl::InvalidArgumentError(
+          "Cannot clone state from a different ModelDataProcessor type.");
+    }
+    return this->CloneStateImpl(*typed_other);
   }
 
  private:
