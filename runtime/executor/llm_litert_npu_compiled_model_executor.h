@@ -349,15 +349,15 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
 
   // Create the executor for Gemma3n, with multi-modality support.
   static absl::StatusOr<std::unique_ptr<LlmLiteRtNpuCompiledModelExecutor>>
-  CreateForGemma3n(const LlmExecutorSettings& executor_settings,
-                   ModelResources& resources, litert::Environment& env,
-                   const litert::Model* transformer_model);
+  CreateForModelHasPerLayerEmbedding(
+      const LlmExecutorSettings& executor_settings, ModelResources& resources,
+      litert::Environment& env, const litert::Model* transformer_model);
 
   // Create the executor for Gemma3.
   static absl::StatusOr<std::unique_ptr<LlmLiteRtNpuCompiledModelExecutor>>
-  CreateForGemma3(const LlmExecutorSettings& executor_settings,
-                  ModelResources& resources, litert::Environment& env,
-                  const litert::Model* transformer_model);
+  CreateForModelWithoutPerLayerEmbedding(
+      const LlmExecutorSettings& executor_settings, ModelResources& resources,
+      litert::Environment& env, const litert::Model* transformer_model);
 
   LlmExecutorSettings executor_settings_;
   ::litert::Environment& env_;

@@ -22,9 +22,11 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/algorithm/container.h"  // from @com_google_absl
 #include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/log/absl_log.h"  // from @com_google_absl
 #include "absl/memory/memory.h"  // from @com_google_absl
@@ -45,6 +47,7 @@
 #include "litert/cc/litert_macros.h"  // from @litert
 #include "litert/cc/litert_model.h"  // from @litert
 #include "litert/cc/litert_options.h"  // from @litert
+#include "litert/cc/litert_ranked_tensor_type.h"  // from @litert
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
 #include "litert/cc/options/litert_qualcomm_options.h"  // from @litert
 #include "runtime/components/embedding_lookup/embedding_lookup_manager.h"
@@ -631,6 +634,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::AllocateTransformerBuffers(
   constexpr absl::string_view kv_cache_slice_k_root_name = "kv_slice_k_";
   constexpr absl::string_view kv_cache_slice_v_root_name = "kv_slice_v_";
 
+  // Create input buffers for prefill signature.
   for (auto input_name : prefill_signature->InputNames()) {
     if (absl::StartsWith(input_name, kv_cache_k_root_name) ||
         absl::StartsWith(input_name, kv_cache_v_root_name)) {
@@ -645,10 +649,20 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::AllocateTransformerBuffers(
       gemma_prefill_input_buffers[input_name].Clear();
     }
   }
+  // Create input buffers for decode signature. Skip kv cache input buffers as
+  // they are already created in the prefill signature.
   auto decode_signature = transformer_model->FindSignature(kDecodeSignature);
   for (auto input_name : decode_signature->InputNames()) {
     if (absl::StartsWith(input_name, kv_cache_k_root_name) ||
         absl::StartsWith(input_name, kv_cache_v_root_name)) {
+      // Create the input kv cache buffer for the decode signature if it is not
+      // created in the prefill signature.
+      if (!input_kv_cache_buffers.contains(input_name)) {
+        LITERT_ASSIGN_OR_RETURN(
+            input_kv_cache_buffers[input_name],
+            llm_compiled_model.CreateInputBuffer(kDecodeSignature, input_name));
+        input_kv_cache_buffers[input_name].Clear();
+      }
       continue;
     }
     LITERT_ASSIGN_OR_RETURN(
@@ -656,6 +670,8 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::AllocateTransformerBuffers(
         llm_compiled_model.CreateInputBuffer(kDecodeSignature, input_name));
     gemma_decode_input_buffers[input_name].Clear();
   }
+
+  // Create output buffers for prefill signature.
   for (auto output_name : prefill_signature->OutputNames()) {
     if (absl::StartsWith(output_name, kv_cache_slice_k_root_name) ||
         absl::StartsWith(output_name, kv_cache_slice_v_root_name)) {
@@ -665,6 +681,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::AllocateTransformerBuffers(
                                                 output_name));
     }
   }
+  // Create output buffers for decode signature.
   for (auto output_name : decode_signature->OutputNames()) {
     if (absl::StartsWith(output_name, kv_cache_slice_k_root_name) ||
         absl::StartsWith(output_name, kv_cache_slice_v_root_name)) {
@@ -697,7 +714,16 @@ LlmLiteRtNpuCompiledModelExecutor::CreateLlmInferenceContextWithBufferSharing(
       LITERT_ASSIGN_OR_RETURN(prefill_input_buffers[key], value.Duplicate());
     }
     // Duplicate all kv cache buffers to prefill inputs.
+    LITERT_ASSIGN_OR_RETURN(
+        auto prefill_input_names,
+        llm_compiled_model.GetSignatureInputNames(kPrefillSignature));
     for (const auto& [key, value] : input_kv_cache_buffers) {
+      // Check if the kv cache buffer is used in the prefill signature.
+      if (absl::c_find(prefill_input_names, std::string(key)) ==
+          prefill_input_names.end()) {
+        continue;
+      }
+
       // The last layer kv cache in the prefill signature has float32 elements,
       // although its not used in the model, CompiledModel will complain about
       // the mismatched buffer size. So we need to correct the buffer size here,
@@ -1440,11 +1466,13 @@ LlmLiteRtNpuCompiledModelExecutor::Create(
   // presence of per-layer embeddings as the signal for Gemma3n.
   LITERT_ASSIGN_OR_RETURN(bool has_per_layer_embeddings,
                           HasPerLayerEmbedder(*llm_model));
-  const bool IsGemma3n = has_per_layer_embeddings;
-  if (IsGemma3n) {
-    return CreateForGemma3n(executor_settings, resources, env, llm_model);
+  const bool model_has_per_layer_embedding = has_per_layer_embeddings;
+  if (model_has_per_layer_embedding) {
+    return CreateForModelHasPerLayerEmbedding(executor_settings, resources, env,
+                                              llm_model);
   } else {
-    return CreateForGemma3(executor_settings, resources, env, llm_model);
+    return CreateForModelWithoutPerLayerEmbedding(executor_settings, resources,
+                                                  env, llm_model);
   }
 };
 
@@ -1462,7 +1490,7 @@ litert::Expected<litert::Options> CreateLiteRtOptions() {
 }
 
 absl::StatusOr<std::unique_ptr<LlmLiteRtNpuCompiledModelExecutor>>
-LlmLiteRtNpuCompiledModelExecutor::CreateForGemma3n(
+LlmLiteRtNpuCompiledModelExecutor::CreateForModelHasPerLayerEmbedding(
     const LlmExecutorSettings& executor_settings, ModelResources& resources,
     litert::Environment& env, const litert::Model* transformer_model) {
   // If the model is fully AOT compiled for NPU, NPU accelerator is used
@@ -1499,14 +1527,16 @@ LlmLiteRtNpuCompiledModelExecutor::CreateForGemma3n(
   // Gemma3n specific fix: KV cache buffer 19 of *prefill* is not connected
   // to any OPs in the model, making the LiteRT runtime allocate host memory
   // for it. This is incompatible when running the transformer model on the NPU.
-  LITERT_ASSIGN_OR_RETURN(
-      input_kv_cache_buffers[cache_k19],
-      llm_compiled_model.CreateInputBuffer(kDecodeSignature, cache_k19));
-  input_kv_cache_buffers[cache_k19].Clear();
-  LITERT_ASSIGN_OR_RETURN(
-      input_kv_cache_buffers[cache_v19],
-      llm_compiled_model.CreateInputBuffer(kDecodeSignature, cache_v19));
-  input_kv_cache_buffers[cache_v19].Clear();
+  if (input_kv_cache_buffers.contains(cache_k19)) {
+    LITERT_ASSIGN_OR_RETURN(
+        input_kv_cache_buffers[cache_k19],
+        llm_compiled_model.CreateInputBuffer(kDecodeSignature, cache_k19));
+    input_kv_cache_buffers[cache_k19].Clear();
+    LITERT_ASSIGN_OR_RETURN(
+        input_kv_cache_buffers[cache_v19],
+        llm_compiled_model.CreateInputBuffer(kDecodeSignature, cache_v19));
+    input_kv_cache_buffers[cache_v19].Clear();
+  }
   ASSIGN_OR_RETURN(
       auto llm_inference_context,
       CreateLlmInferenceContextWithBufferSharing(
@@ -1607,7 +1637,7 @@ LlmLiteRtNpuCompiledModelExecutor::CreateForGemma3n(
 }
 
 absl::StatusOr<std::unique_ptr<LlmLiteRtNpuCompiledModelExecutor>>
-LlmLiteRtNpuCompiledModelExecutor::CreateForGemma3(
+LlmLiteRtNpuCompiledModelExecutor::CreateForModelWithoutPerLayerEmbedding(
     const LlmExecutorSettings& executor_settings, ModelResources& resources,
     litert::Environment& env, const litert::Model* transformer_model) {
   // If the model is fully AOT compiled for NPU, NPU accelerator is used
