@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <deque>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -34,7 +35,6 @@
 #include "runtime/conversation/conversation.h"
 #include "runtime/engine/engine.h"
 #include "runtime/engine/engine_factory.h"
-#include "runtime/engine/engine_settings.h"
 #include "tflite/core/c/c_api_types.h"  // from @litert
 #include "tflite/logger.h"  // from @litert
 #include "tflite/minimal_logging.h"  // from @litert
@@ -54,6 +54,37 @@
 namespace litert::lm {
 
 namespace nb = nanobind;
+
+// Helper to convert Python dict or str to JSON message.
+nlohmann::json ParseJsonMessage(const nb::handle& message) {
+  if (nb::isinstance<nb::dict>(message)) {
+    return nb::cast<nb::dict>(message);
+  }
+  if (nb::isinstance<nb::str>(message)) {
+    return {{"role", "user"}, {"content", nb::cast<std::string>(message)}};
+  }
+  throw std::runtime_error("Message must be a dict or a str.");
+}
+
+// Helper to extract C++ Backend from Python Backend enum.
+Backend ParseBackend(const nb::handle& handle,
+                     Backend default_val = Backend::CPU) {
+  if (handle.is_none()) return default_val;
+  return static_cast<Backend>(nb::cast<int>(nb::object(handle.attr("value"))));
+}
+
+// Helper to inject Python backend attribute.
+void SetBackendAttr(nb::object& py_engine, const nb::handle& backend_handle) {
+  if (backend_handle.is_none()) {
+    py_engine.attr("backend") =
+        nb::module_::import_(
+            "litert_lm.python.interfaces")
+            .attr("Backend")
+            .attr("CPU");
+  } else {
+    py_engine.attr("backend") = backend_handle;
+  }
+}
 
 // Note: Consider move to C++ API.
 enum class LogSeverity {
@@ -90,28 +121,28 @@ class MessageIterator {
   }
 
   nlohmann::json Next() {
-    absl::StatusOr<Message> msg;
+    absl::StatusOr<Message> message;
     {
       nb::gil_scoped_release release;
       absl::MutexLock lock(&mutex_);
       mutex_.Await(absl::Condition(this, &MessageIterator::HasData));
-      msg = std::move(queue_.front());
+      message = std::move(queue_.front());
       queue_.pop_front();
     }
 
-    if (!msg.ok()) {
-      if (absl::IsCancelled(msg.status())) {
+    if (!message.ok()) {
+      if (absl::IsCancelled(message.status())) {
         throw nb::stop_iteration();
       }
-      throw std::runtime_error(msg.status().ToString());
+      throw std::runtime_error(message.status().ToString());
     }
 
-    if (!std::holds_alternative<JsonMessage>(*msg)) {
+    if (!std::holds_alternative<JsonMessage>(*message)) {
       throw std::runtime_error(
           "SendMessageAsync did not return a JsonMessage.");
     }
 
-    auto& json_msg = std::get<JsonMessage>(*msg);
+    auto& json_msg = std::get<JsonMessage>(*message);
     if (json_msg.empty()) {
       throw nb::stop_iteration();
     }
@@ -137,8 +168,8 @@ struct PyBenchmarkInfo {
   double last_decode_tokens_per_second;
 };
 
-NB_MODULE(litert_lm_ext, m) {
-  nb::enum_<LogSeverity>(m, "LogSeverity")
+NB_MODULE(litert_lm_ext, module) {
+  nb::enum_<LogSeverity>(module, "LogSeverity")
       .value("VERBOSE", LogSeverity::VERBOSE)
       .value("DEBUG", LogSeverity::DEBUG)
       .value("INFO", LogSeverity::INFO)
@@ -148,110 +179,96 @@ NB_MODULE(litert_lm_ext, m) {
       .value("SILENT", LogSeverity::SILENT)
       .export_values();
 
-  nb::enum_<Backend>(m, "Backend")
-      .value("CPU", Backend::CPU)
-      .value("GPU", Backend::GPU)
-      .value("UNSPECIFIED", Backend::UNSPECIFIED)
-      .export_values();
-
-  nb::class_<ModelAssets>(m, "ModelAssets")
-      .def_static(
-          "create",
-          [](absl::string_view model_path) {
-            return VALUE_OR_THROW(ModelAssets::Create(model_path));
-          },
-          nb::arg("model_path"));
-
-  nb::class_<EngineSettings>(m, "EngineSettings")
-      .def_static(
-          "create_default",
-          [](const ModelAssets& model_assets, Backend backend,
-             std::optional<Backend> vision_backend,
-             std::optional<Backend> audio_backend) {
-            return VALUE_OR_THROW(EngineSettings::CreateDefault(
-                model_assets, backend, vision_backend, audio_backend));
-          },
-          nb::arg("model_assets"), nb::arg("backend") = Backend::CPU,
-          nb::arg("vision_backend") = std::nullopt,
-          nb::arg("audio_backend") = std::nullopt)
-      .def(
-          "set_cache_dir",
-          [](EngineSettings& self, absl::string_view cache_dir) {
-            self.GetMutableMainExecutorSettings().SetCacheDir(
-                std::string(cache_dir));
-          },
-          nb::arg("cache_dir"))
-      .def(
-          "set_max_num_tokens",
-          [](EngineSettings& self, int max_num_tokens) {
-            self.GetMutableMainExecutorSettings().SetMaxNumTokens(
-                max_num_tokens);
-          },
-          nb::arg("max_num_tokens"));
-
-  m.def(
-      "create_default_engine",
-      [](const EngineSettings& engine_settings,
+  module.def(
+      "Engine",
+      [](absl::string_view model_path, const nb::handle& backend,
+         int max_num_tokens, absl::string_view cache_dir,
+         const nb::handle& vision_backend, const nb::handle& audio_backend,
          absl::string_view input_prompt_as_hint) {
-        return VALUE_OR_THROW(EngineFactory::CreateDefault(
-            engine_settings, input_prompt_as_hint));
-      },
-      nb::arg("engine_settings"), nb::arg("input_prompt_as_hint") = "");
-
-  m.def(
-      "set_min_log_severity",
-      [](LogSeverity log_severity) {
-        absl::LogSeverityAtLeast absl_log_severity;
-        LiteRtLogSeverity litert_log_severity;
-        tflite::LogSeverity tflite_log_severity;
-
-        switch (log_severity) {
-          case LogSeverity::VERBOSE:
-            absl_log_severity = absl::LogSeverityAtLeast::kInfo;
-            litert_log_severity = kLiteRtLogSeverityVerbose;
-            tflite_log_severity = tflite::TFLITE_LOG_VERBOSE;
-            break;
-          case LogSeverity::DEBUG:
-            absl_log_severity = absl::LogSeverityAtLeast::kInfo;
-            litert_log_severity = kLiteRtLogSeverityDebug;
-            tflite_log_severity = tflite::TFLITE_LOG_VERBOSE;
-            break;
-          case LogSeverity::INFO:
-            absl_log_severity = absl::LogSeverityAtLeast::kInfo;
-            litert_log_severity = kLiteRtLogSeverityInfo;
-            tflite_log_severity = tflite::TFLITE_LOG_INFO;
-            break;
-          case LogSeverity::WARNING:
-            absl_log_severity = absl::LogSeverityAtLeast::kWarning;
-            litert_log_severity = kLiteRtLogSeverityWarning;
-            tflite_log_severity = tflite::TFLITE_LOG_WARNING;
-            break;
-          case LogSeverity::ERROR:
-            absl_log_severity = absl::LogSeverityAtLeast::kError;
-            litert_log_severity = kLiteRtLogSeverityError;
-            tflite_log_severity = tflite::TFLITE_LOG_ERROR;
-            break;
-          case LogSeverity::FATAL:
-            absl_log_severity = absl::LogSeverityAtLeast::kFatal;
-            litert_log_severity = kLiteRtLogSeverityError;
-            tflite_log_severity = tflite::TFLITE_LOG_ERROR;
-            break;
-          default:  // infinity
-            absl_log_severity = absl::LogSeverityAtLeast::kInfinity;
-            litert_log_severity = kLiteRtLogSeveritySilent;
-            tflite_log_severity = tflite::TFLITE_LOG_SILENT;
-            break;
+        Backend main_backend = ParseBackend(backend);
+        std::optional<Backend> vision_backend_opt = std::nullopt;
+        if (!vision_backend.is_none()) {
+          vision_backend_opt = ParseBackend(vision_backend);
+        }
+        std::optional<Backend> audio_backend_opt = std::nullopt;
+        if (!audio_backend.is_none()) {
+          audio_backend_opt = ParseBackend(audio_backend);
         }
 
-        absl::SetMinLogLevel(absl_log_severity);
+        auto model_assets = VALUE_OR_THROW(ModelAssets::Create(model_path));
+        auto settings = VALUE_OR_THROW(EngineSettings::CreateDefault(
+            model_assets, main_backend, vision_backend_opt, audio_backend_opt));
+
+        settings.GetMutableMainExecutorSettings().SetMaxNumTokens(
+            max_num_tokens);
+        if (!cache_dir.empty()) {
+          settings.GetMutableMainExecutorSettings().SetCacheDir(
+              std::string(cache_dir));
+        }
+
+        auto engine = VALUE_OR_THROW(
+            EngineFactory::CreateDefault(settings, input_prompt_as_hint));
+
+        nb::object py_engine = nb::cast(std::move(engine));
+        py_engine.attr("model_path") = model_path;
+        SetBackendAttr(py_engine, backend);
+        py_engine.attr("max_num_tokens") = max_num_tokens;
+        py_engine.attr("cache_dir") = cache_dir;
+        return py_engine;
+      },
+      nb::arg("model_path"), nb::arg("backend") = nb::none(),
+      nb::arg("max_num_tokens") = 512, nb::arg("cache_dir") = "",
+      nb::arg("vision_backend") = nb::none(),
+      nb::arg("audio_backend") = nb::none(),
+      nb::arg("input_prompt_as_hint") = "");
+
+  module.def(
+      "set_min_log_severity",
+      [](LogSeverity log_severity) {
+        struct SeverityMapping {
+          absl::LogSeverityAtLeast absl_severity;
+          LiteRtLogSeverity litert_severity;
+          tflite::LogSeverity tflite_severity;
+        };
+
+        static const std::map<LogSeverity, SeverityMapping> mapping = {
+            {LogSeverity::VERBOSE,
+             {absl::LogSeverityAtLeast::kInfo, kLiteRtLogSeverityVerbose,
+              tflite::TFLITE_LOG_VERBOSE}},
+            {LogSeverity::DEBUG,
+             {absl::LogSeverityAtLeast::kInfo, kLiteRtLogSeverityDebug,
+              tflite::TFLITE_LOG_VERBOSE}},
+            {LogSeverity::INFO,
+             {absl::LogSeverityAtLeast::kInfo, kLiteRtLogSeverityInfo,
+              tflite::TFLITE_LOG_INFO}},
+            {LogSeverity::WARNING,
+             {absl::LogSeverityAtLeast::kWarning, kLiteRtLogSeverityWarning,
+              tflite::TFLITE_LOG_WARNING}},
+            {LogSeverity::ERROR,
+             {absl::LogSeverityAtLeast::kError, kLiteRtLogSeverityError,
+              tflite::TFLITE_LOG_ERROR}},
+            {LogSeverity::FATAL,
+             {absl::LogSeverityAtLeast::kFatal, kLiteRtLogSeverityError,
+              tflite::TFLITE_LOG_ERROR}},
+            {LogSeverity::SILENT,
+             {absl::LogSeverityAtLeast::kInfinity, kLiteRtLogSeveritySilent,
+              tflite::TFLITE_LOG_SILENT}},
+        };
+
+        auto mapping_it = mapping.find(log_severity);
+        const SeverityMapping& severity_mapping =
+            (mapping_it != mapping.end()) ? mapping_it->second
+                                          : mapping.at(LogSeverity::SILENT);
+
+        absl::SetMinLogLevel(severity_mapping.absl_severity);
         LiteRtSetMinLoggerSeverity(LiteRtGetDefaultLogger(),
-                                   litert_log_severity);
+                                   severity_mapping.litert_severity);
         tflite::logging_internal::MinimalLogger::SetMinimumLogSeverity(
-            tflite_log_severity);
+            severity_mapping.tflite_severity);
       },
       nb::arg("log_severity"));
 
-  nb::class_<Engine>(m, "Engine")
+  nb::class_<Engine>(module, "_Engine", nb::dynamic_attr())
       // Support for Python context managers (with statement).
       // __enter__ returns the object itself.
       .def("__enter__", [](nb::handle self) { return self; })
@@ -262,17 +279,20 @@ NB_MODULE(litert_lm_ext, m) {
           [](nb::handle self, nb::handle exc_type, nb::handle exc_value,
              nb::handle traceback) { nb::inst_destruct(self); },
           nb::arg("exc_type").none(), nb::arg("exc_value").none(),
-          nb::arg("traceback").none());
+          nb::arg("traceback").none())
+      .def("create_conversation", [](const nb::object& self) {
+        Engine& engine = nb::cast<Engine&>(self);
 
-  nb::class_<ConversationConfig>(m, "ConversationConfig")
-      .def_static(
-          "create_default",
-          [](const Engine& engine) {
-            return VALUE_OR_THROW(ConversationConfig::CreateDefault(engine));
-          },
-          nb::arg("engine"));
+        auto config = ConversationConfig::Builder().Build(engine);
 
-  nb::class_<Conversation>(m, "Conversation")
+        auto conversation =
+            VALUE_OR_THROW(Conversation::Create(engine, *config));
+
+        nb::object py_conversation = nb::cast(std::move(conversation));
+        return py_conversation;
+      });
+
+  nb::class_<Conversation>(module, "Conversation", nb::dynamic_attr())
       // Support for Python context managers (with statement).
       // __enter__ returns the object itself.
       .def("__enter__", [](nb::handle self) { return self; })
@@ -285,16 +305,10 @@ NB_MODULE(litert_lm_ext, m) {
           nb::arg("exc_type").none(), nb::arg("exc_value").none(),
           nb::arg("traceback").none())
       .def("cancel_process", &Conversation::CancelProcess)
-      .def_static(
-          "create",
-          [](Engine& engine, const ConversationConfig& config) {
-            return VALUE_OR_THROW(Conversation::Create(engine, config));
-          },
-          nb::arg("engine"), nb::arg("config"))
       .def(
           "send_message",
-          [](Conversation& self, const nb::dict& message) {
-            nlohmann::json json_message = message;
+          [](Conversation& self, const nb::handle& message) {
+            nlohmann::json json_message = ParseJsonMessage(message);
             absl::StatusOr<Message> result = self.SendMessage(json_message);
             Message message_variant = VALUE_OR_THROW(std::move(result));
 
@@ -309,19 +323,19 @@ NB_MODULE(litert_lm_ext, m) {
           nb::arg("message"))
       .def(
           "send_message_async",
-          [](Conversation& self, const nb::dict& message) {
-            nlohmann::json json_message = message;
+          [](Conversation& self, const nb::handle& message) {
+            nlohmann::json json_message = ParseJsonMessage(message);
             auto iterator = std::make_shared<MessageIterator>();
 
             absl::Status status = self.SendMessageAsync(
-                json_message, [iterator](absl::StatusOr<Message> msg) {
-                  iterator->Push(std::move(msg));
+                json_message, [iterator](absl::StatusOr<Message> message) {
+                  iterator->Push(std::move(message));
                 });
 
             if (!status.ok()) {
-              std::stringstream ss;
-              ss << "SendMessageAsync failed: " << status;
-              throw std::runtime_error(ss.str());
+              std::stringstream error_msg_stream;
+              error_msg_stream << "SendMessageAsync failed: " << status;
+              throw std::runtime_error(error_msg_stream.str());
             }
             return iterator;
           },
@@ -330,17 +344,18 @@ NB_MODULE(litert_lm_ext, m) {
   // Expose the MessageIterator to Python so that it can be used in a
   // standard `for chunk in stream:` loop. We bind Python's iterator protocol
   // (__iter__ and __next__) to our C++ implementation.
-  nb::class_<MessageIterator>(m, "MessageIterator")
+  nb::class_<MessageIterator>(module, "MessageIterator")
       .def("__iter__", [](nb::handle self) { return self; })
       .def("__next__", &MessageIterator::Next);
 
-  m.def(
+  module.def(
       "benchmark",
-      [](absl::string_view model_path, Backend backend, int prefill_tokens,
-         int decode_tokens, absl::string_view cache_dir) {
+      [](absl::string_view model_path, const nb::handle& backend,
+         int prefill_tokens, int decode_tokens, absl::string_view cache_dir) {
+        Backend main_backend = ParseBackend(backend);
         auto model_assets = VALUE_OR_THROW(ModelAssets::Create(model_path));
         auto settings = VALUE_OR_THROW(
-            EngineSettings::CreateDefault(model_assets, backend));
+            EngineSettings::CreateDefault(model_assets, main_backend));
 
         if (!cache_dir.empty()) {
           settings.GetMutableMainExecutorSettings().SetCacheDir(
@@ -409,11 +424,11 @@ NB_MODULE(litert_lm_ext, m) {
 
         return result;
       },
-      nb::arg("model_path"), nb::arg("backend"),
+      nb::arg("model_path"), nb::arg("backend") = nb::none(),
       nb::arg("prefill_tokens") = 256, nb::arg("decode_tokens") = 256,
       nb::arg("cache_dir") = "");
 
-  nb::class_<PyBenchmarkInfo>(m, "BenchmarkInfo",
+  nb::class_<PyBenchmarkInfo>(module, "BenchmarkInfo",
                               "Data class to hold benchmark information.")
       .def_rw("init_time_in_second", &PyBenchmarkInfo::init_time_in_second,
               "The time in seconds to initialize the engine and the "

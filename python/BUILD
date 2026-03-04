@@ -12,7 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load(
+    "@org_tensorflow//tensorflow:pytype.default.bzl",
+    "pytype_strict_library",
+)
 load("@org_tensorflow//tensorflow:tensorflow.default.bzl", "pybind_extension")
+
+pytype_strict_library(
+    name = "interfaces",
+    srcs = ["interfaces.py"],
+)
 
 pybind_extension(
     name = "litert_lm_ext",
