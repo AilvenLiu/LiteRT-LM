@@ -14,6 +14,11 @@
 
 load("@org_tensorflow//tensorflow:tensorflow.default.bzl", "pybind_extension")
 
+pytype_strict_library(
+    name = "interfaces",
+    srcs = ["interfaces.py"],
+)
+
 pybind_extension(
     name = "litert_lm_ext",
     srcs = ["litert_lm.cc"],
