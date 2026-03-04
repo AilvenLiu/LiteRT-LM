@@ -36,9 +36,9 @@ internal object LiteRtLmJni {
    *   `litert::lm::Backend`.
    * @param maxNumTokens The maximum number of tokens to be processed by the engine. When
    *   non-positive, use the engine's default.
-   * @param enableBenchmark Whether to enable benchmark mode or not.
    * @param cacheDir The directory for cache files.
-   * @param enableBenchmark Whether to enable benchmark or not.
+   * @param enableBenchmark Whether to enable benchmark mode or not.
+   * @param cpuNumThreads The number of threads to use for the CPU backend.
    * @param npuLibrariesDir The directory for the NPU libraries.
    * @return A pointer to the native engine instance.
    */
@@ -50,6 +50,7 @@ internal object LiteRtLmJni {
     maxNumTokens: Int,
     cacheDir: String,
     enableBenchmark: Boolean,
+    cpuNumThreads: Int,
     npuLibrariesDir: String,
   ): Long
 
@@ -61,6 +62,8 @@ internal object LiteRtLmJni {
    * @param prefillTokens The number of tokens to prefill.
    * @param decodeTokens The number of tokens to decode.
    * @param cacheDir The directory for cache files.
+   * @param cpuNumThreads The number of threads to use for the CPU backend.
+   * @param npuLibrariesDir The directory for the NPU libraries.
    * @return A pointer to the native engine instance.
    */
   external fun nativeCreateBenchmark(
@@ -69,6 +72,8 @@ internal object LiteRtLmJni {
     prefillTokens: Int,
     decodeTokens: Int,
     cacheDir: String,
+    cpuNumThreads: Int,
+    npuLibrariesDir: String,
   ): Long
 
   /**

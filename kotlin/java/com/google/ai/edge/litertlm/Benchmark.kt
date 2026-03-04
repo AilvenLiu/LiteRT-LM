@@ -51,6 +51,8 @@ data class BenchmarkInfo(
  * @param cacheDir The directory for placing cache files. It should be a directory with write
  *   access. If not set, it uses the directory of the [modelPath]. Set to ":nocache" to disable
  *   caching at all.
+ * @param cpuConfig The configuration for the CPU backend.
+ * @param npuConfig The configuration for the NPU backend.
  * @return The benchmark info.
  */
 @ExperimentalApi
@@ -60,6 +62,8 @@ fun benchmark(
   prefillTokens: Int = 256,
   decodeTokens: Int = 256,
   cacheDir: String? = null,
+  cpuConfig: CpuConfig = CpuConfig(),
+  npuConfig: NpuConfig = NpuConfig(),
 ): BenchmarkInfo {
   val enginePointer =
     LiteRtLmJni.nativeCreateBenchmark(
@@ -68,6 +72,8 @@ fun benchmark(
       prefillTokens,
       decodeTokens,
       cacheDir ?: "",
+      cpuConfig.numThreads ?: -1,
+      npuConfig.librariesDir,
     )
 
   try {

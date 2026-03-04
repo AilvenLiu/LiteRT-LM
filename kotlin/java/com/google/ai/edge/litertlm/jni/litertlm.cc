@@ -38,6 +38,7 @@
 #include "runtime/engine/engine_settings.h"
 #include "runtime/engine/io_types.h"
 #include "runtime/executor/executor_settings_base.h"
+#include "runtime/executor/llm_executor_settings.h"
 #include "runtime/proto/sampler_params.pb.h"
 #include "tflite/logger.h"  // from @litert
 #include "tflite/minimal_logging.h"  // from @litert
@@ -360,7 +361,8 @@ LITERTLM_JNIEXPORT void JNICALL JNI_METHOD(nativeSetMinLogSeverity)(
 LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
     JNIEnv* env, jclass thiz, jstring model_path, jstring backend,
     jstring vision_backend, jstring audio_backend, jint max_num_tokens,
-    jstring cache_dir, jboolean enable_benchmark, jstring npu_libraries_dir) {
+    jstring cache_dir, jboolean enable_benchmark, jint cpu_num_threads,
+    jstring npu_libraries_dir) {
   const char* model_path_chars = env->GetStringUTFChars(model_path, nullptr);
   std::string model_path_str(model_path_chars);
   env->ReleaseStringUTFChars(model_path, model_path_chars);
@@ -445,6 +447,21 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
     }
   }
 
+  if (cpu_num_threads > 0) {
+    if (auto main_cpu_config =
+            settings->GetMutableMainExecutorSettings()
+                .MutableBackendConfig<litert::lm::CpuConfig>();
+        main_cpu_config.ok()) {
+      main_cpu_config.value().number_of_threads = cpu_num_threads;
+    }
+    // Vision doesn't currently support SetNumThreads or CpuConfig.
+    if (audio_backend_optional.has_value() &&
+        *audio_backend_optional == Backend::CPU) {
+      settings->GetMutableAudioExecutorSettings()->SetNumThreads(
+          cpu_num_threads);
+    }
+  }
+
   const char* npu_libraries_dir_chars =
       env->GetStringUTFChars(npu_libraries_dir, nullptr);
   std::string npu_libraries_dir_str(npu_libraries_dir_chars);
@@ -482,7 +499,8 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
 
 LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateBenchmark)(
     JNIEnv* env, jclass thiz, jstring model_path, jstring backend,
-    jint prefill_tokens, jint decode_tokens, jstring cache_dir) {
+    jint prefill_tokens, jint decode_tokens, jstring cache_dir,
+    jint cpu_num_threads, jstring npu_libraries_dir) {
   const char* model_path_chars = env->GetStringUTFChars(model_path, nullptr);
   std::string model_path_str(model_path_chars);
   env->ReleaseStringUTFChars(model_path, model_path_chars);
@@ -523,6 +541,24 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateBenchmark)(
   env->ReleaseStringUTFChars(cache_dir, cache_dir_chars);
   if (!cache_dir_str.empty()) {
     settings->GetMutableMainExecutorSettings().SetCacheDir(cache_dir_str);
+  }
+
+  if (cpu_num_threads > 0) {
+    if (auto main_cpu_config =
+            settings->GetMutableMainExecutorSettings()
+                .MutableBackendConfig<litert::lm::CpuConfig>();
+        main_cpu_config.ok()) {
+      main_cpu_config.value().number_of_threads = cpu_num_threads;
+    }
+  }
+
+  const char* npu_libraries_dir_chars =
+      env->GetStringUTFChars(npu_libraries_dir, nullptr);
+  std::string npu_libraries_dir_str(npu_libraries_dir_chars);
+  env->ReleaseStringUTFChars(npu_libraries_dir, npu_libraries_dir_chars);
+  if (!npu_libraries_dir_str.empty()) {
+    settings->GetMutableMainExecutorSettings().SetLitertDispatchLibDir(
+        npu_libraries_dir_str);
   }
 
   auto& benchmark_params = settings->GetMutableBenchmarkParams();

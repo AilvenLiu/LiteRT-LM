@@ -27,6 +27,30 @@ enum class Backend {
 }
 
 /**
+ * Configuration for the CPU backend.
+ *
+ * @property numThreads The number of threads to use for the CPU backend. When null, it uses the
+ *   engine's default.
+ */
+data class CpuConfig(val numThreads: Int? = null)
+
+/**
+ * Configuration for the NPU backend.
+ *
+ * @property librariesDir The directory contains the NPU libraries for [Backend.NPU].
+ *
+ *   On Android, for apps with built-in NPU libraries, including NPU libraries delivered as Google
+ *   Play Feature modules, set it to `context.applicationInfo.nativeLibraryDir`.
+ *
+ *   If NPU libraries are not built-in (downloaded separately or on JVM Desktop), set this path to
+ *   the directory containing the libraries.
+ *
+ *   Note: This configuration is read only when a new [Engine] is created. Changing this value will
+ *   not affect any existing [Engine] or [Conversation] instances.
+ */
+data class NpuConfig(val librariesDir: String = "")
+
+/**
  * Configuration for the LiteRT-LM engine.
  *
  * @property modelPath The file path to the LiteRT-LM model.
@@ -40,6 +64,10 @@ enum class Backend {
  * @property cacheDir The directory for placing cache files. It should be a directory with write
  *   access. If not set, it uses the directory of the [modelPath]. Set to ":nocache" to disable
  *   caching at all.
+ * @property cpuConfig The configuration for the CPU backend. This is shared between all executors
+ *   using [Backend.CPU].
+ * @property npuConfig The configuration for the NPU backend. This is shared between all executors
+ *   using [Backend.NPU].
  */
 data class EngineConfig(
   val modelPath: String,
@@ -48,6 +76,8 @@ data class EngineConfig(
   val audioBackend: Backend? = null,
   val maxNumTokens: Int? = null,
   val cacheDir: String? = null,
+  val cpuConfig: CpuConfig = CpuConfig(),
+  val npuConfig: NpuConfig = NpuConfig(),
 ) {
   init {
     require(maxNumTokens == null || maxNumTokens > 0) {
