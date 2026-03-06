@@ -1,7 +1,7 @@
 # LiteRT-LM Kotlin API
 
 The Kotlin API of LiteRT-LM for **Android** and **JVM (Linux, MacOS, Windows)**
-with features like **GPU acceleration** (NPU upcoming!), **multi-modality**, and
+with features like **GPU and NPU acceleration**, **multi-modality**, and
 **tools use**.
 
 ## Introduction
@@ -85,7 +85,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 
 val engineConfig = EngineConfig(
     modelPath = "/path/to/your/model.litertlm", // Replace with your model path
-    backend = Backend.CPU(), // Or Backend.GPU()
+    backend = Backend.CPU(), // Or Backend.GPU() and Backend.NPU("...")
     // Optional: Pick a writable dir. This can improve 2nd load time.
     // cacheDir = "/tmp/" or context.cacheDir.path (for Android)
 )
@@ -107,6 +107,19 @@ native libraries explicitly by adding the following to your
     <uses-native-library android:name="libvndksupport.so" android:required="false"/>
     <uses-native-library android:name="libOpenCL.so" android:required="false"/>
   </application>
+```
+
+To use the **NPU** backend, you might need to specify the directory containing
+the NPU libraries. On Android, if the libraries are bundled with your app, set
+it to `context.applicationInfo.nativeLibraryDir`. See [LiteRT-LM
+NPU](https://ai.google.dev/edge/litert/next/litert_lm_npu#NPU) for more details
+about the NPU native libraries.
+
+```kotlin
+val engineConfig = EngineConfig(
+    modelPath = modelPath,
+    backend = Backend.NPU(nativeLibraryDir = context.applicationInfo.nativeLibraryDir)
+)
 ```
 
 ### 3. Create a Conversation
@@ -230,9 +243,9 @@ Note: This only works with models with multi-modality support, e.g., the
 // Initialize the `visionBackend` and/or the `audioBackend`
 val engineConfig = EngineConfig(
     modelPath = "/path/to/your/model.litertlm", // Replace with your model path
-    backend = Backend.CPU(), // Or Backend.GPU()
-    visionBackend = Backend.GPU(),
-    audioBackend = Backend.CPU(),
+    backend = Backend.CPU(), // Or Backend.GPU() or Backend.NPU(...)
+    visionBackend = Backend.GPU(), // Or Backend.NPU(...)
+    audioBackend = Backend.CPU(), // Or Backend.NPU(...)
 )
 
 // Sends a message with multi-modality.
