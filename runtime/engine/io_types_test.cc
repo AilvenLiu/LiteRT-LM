@@ -953,7 +953,6 @@ TEST(BenchmarkInfoTests, OperatorOutputWithData) {
   EXPECT_OK(
       benchmark_info.TimeInitPhaseEnd(BenchmarkInfo::InitPhase::kTokenizer));
   EXPECT_OK(benchmark_info.TimeInitPhaseEnd(BenchmarkInfo::InitPhase::kTotal));
-
   EXPECT_OK(benchmark_info.TimePrefillTurnStart());
   EXPECT_OK(benchmark_info.TimePrefillTurnEnd(100));
   EXPECT_OK(benchmark_info.TimePrefillTurnStart());

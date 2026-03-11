@@ -49,19 +49,6 @@ TEST(FakeLlmExecutorTest, ExecutorSettings) {
   EXPECT_EQ(fake_llm_executor.GetExecutorSettings()->GetMaxNumTokens(), 100);
 }
 
-TEST(FakeLlmExecutorTest, UpdateExecutorSettings) {
-  const std::vector<std::vector<int>> prefill_tokens_set = {{1, 2, 3}};
-  const std::vector<std::vector<int>> decode_tokens_set = {{3, 2}, {0, 0}};
-  FakeLlmExecutor fake_llm_executor(3, prefill_tokens_set, decode_tokens_set);
-
-  ASSERT_OK_AND_ASSIGN(auto new_settings,
-                       fake_llm_executor.GetExecutorSettings());
-  new_settings.SetMaxNumTokens(200);
-
-  // The default implementation should return OK.
-  EXPECT_OK(fake_llm_executor.UpdateExecutorSettings(new_settings));
-}
-
 TEST(FakeLlmExecutorTest, Prefill) {
   const std::vector<std::vector<int>> prefill_tokens_set = {{1, 2, 3}};
   const std::vector<std::vector<int>> decode_tokens_set = {{3, 2}, {0, 0}};

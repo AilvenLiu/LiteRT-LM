@@ -114,12 +114,6 @@ class LlmExecutorBase {
                      ExecutorBackendName()));
   };
 
-  // Updates the executor settings.
-  virtual absl::Status UpdateExecutorSettings(
-      const LlmExecutorSettings& executor_settings) {
-    return absl::OkStatus();
-  }
-
   // ------------Vision APIs------------:
   // This function will populate the GPU tensors with the vision embeddings and
   // vision per layer embeddings. This should only be used before the

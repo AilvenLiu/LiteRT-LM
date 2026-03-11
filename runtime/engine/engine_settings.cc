@@ -131,12 +131,8 @@ absl::StatusOr<EngineSettings> EngineSettings::CreateDefault(
                         std::move(audio_executor_settings));
 }
 
-// TODO(b/488067258): Refactor the method to smaller methods.
-// For now, support 2 use cases:
-// 1. The tokenizer is available.
-// 2. The tokenizer is not available, when it is nullptr.
 absl::Status EngineSettings::MaybeUpdateAndValidate(
-    Tokenizer* tokenizer,
+    Tokenizer& tokenizer,
     const proto::LlmMetadata* absl_nullable metadata_from_file,
     absl::string_view input_prompt_as_hint,
     const std::optional<std::string>& text_backend_constraint,
@@ -149,52 +145,41 @@ absl::Status EngineSettings::MaybeUpdateAndValidate(
   }
 
   // Convert the start/stop tokens from string to token ids.
-  if (tokenizer != nullptr) {
-    for (auto& stop_token : *metadata.mutable_stop_tokens()) {
-      if (stop_token.has_token_str()) {
-        auto stop_token_id = tokenizer->TokenToId(stop_token.token_str());
-        if (stop_token_id.ok()) {
-          stop_token.mutable_token_ids()->mutable_ids()->Add(*stop_token_id);
-        } else {
-          auto stop_token_ids =
-              tokenizer->TextToTokenIds(stop_token.token_str());
-          if (stop_token_ids.ok()) {
-            stop_token.mutable_token_ids()->mutable_ids()->Add(
-                stop_token_ids->begin(), stop_token_ids->end());
-          }
+  for (auto& stop_token : *metadata.mutable_stop_tokens()) {
+    if (stop_token.has_token_str()) {
+      auto stop_token_id = tokenizer.TokenToId(stop_token.token_str());
+      if (stop_token_id.ok()) {
+        stop_token.mutable_token_ids()->mutable_ids()->Add(*stop_token_id);
+      } else {
+        auto stop_token_ids = tokenizer.TextToTokenIds(stop_token.token_str());
+        if (stop_token_ids.ok()) {
+          stop_token.mutable_token_ids()->mutable_ids()->Add(
+              stop_token_ids->begin(), stop_token_ids->end());
         }
       }
     }
-    if (metadata.start_token().has_token_str()) {
-      auto start_token_id =
-          tokenizer->TokenToId(metadata.start_token().token_str());
-      if (start_token_id.ok()) {
+  }
+  if (metadata.start_token().has_token_str()) {
+    auto start_token_id =
+        tokenizer.TokenToId(metadata.start_token().token_str());
+    if (start_token_id.ok()) {
+      metadata.mutable_start_token()->mutable_token_ids()->mutable_ids()->Add(
+          *start_token_id);
+    } else {
+      auto start_token_ids =
+          tokenizer.TextToTokenIds(metadata.start_token().token_str());
+      if (start_token_ids.ok()) {
         metadata.mutable_start_token()->mutable_token_ids()->mutable_ids()->Add(
-            *start_token_id);
-      } else {
-        auto start_token_ids =
-            tokenizer->TextToTokenIds(metadata.start_token().token_str());
-        if (start_token_ids.ok()) {
-          metadata.mutable_start_token()
-              ->mutable_token_ids()
-              ->mutable_ids()
-              ->Add(start_token_ids->begin(), start_token_ids->end());
-        }
+            start_token_ids->begin(), start_token_ids->end());
       }
     }
   }
 
   int num_prompt_tokens = 0;
   if (!input_prompt_as_hint.empty()) {
-    if (tokenizer == nullptr) {
-      // If the tokenizer is not available, we estimate the number of tokens
-      // in the input prompt by dividing the number of characters by 4.
-      num_prompt_tokens = 1 + input_prompt_as_hint.size() / 4;
-    } else {
-      num_prompt_tokens = tokenizer->TextToTokenIds(input_prompt_as_hint)
-                              .value_or(std::vector<int>())
-                              .size();
-    }
+    num_prompt_tokens = tokenizer.TextToTokenIds(input_prompt_as_hint)
+                            .value_or(std::vector<int>())
+                            .size();
   }
 
   // Load the max num tokens from the model file.
@@ -256,13 +241,8 @@ absl::Status EngineSettings::MaybeUpdateAndValidate(
   if (!metadata.has_llm_model_type()) {
     const auto& model_assets = main_executor_settings_.GetModelAssets();
     auto model_path = model_assets.GetPath();
-    if (tokenizer != nullptr) {
-      ASSIGN_OR_RETURN(*metadata.mutable_llm_model_type(),
-                       InferLlmModelType(metadata, tokenizer));
-    } else {
-      return absl::InvalidArgumentError(
-          "Tokenizer is null and LLM model type is not set.");
-    }
+    ASSIGN_OR_RETURN(*metadata.mutable_llm_model_type(),
+                     InferLlmModelType(metadata, tokenizer));
   }
 
   // Set allow_src_quantized_fc_conv_ops to default values depending on the

@@ -57,15 +57,10 @@ void PopulateDefaultGemma3N(proto::Gemma3N& gemma3n) {
 }
 
 absl::StatusOr<proto::LlmModelType> CreateModelType(
-    const std::string& start_turn_text, Tokenizer* tokenizer) {
-  if (tokenizer == nullptr) {
-    proto::LlmModelType model_type;
-    model_type.mutable_generic_model();
-    return model_type;
-  }
+    const std::string& start_turn_text, Tokenizer& tokenizer) {
   proto::LlmModelType model_type;
   ASSIGN_OR_RETURN(auto audio_token_ids,
-                   tokenizer->TextToTokenIds("<start_of_audio>"));
+                   tokenizer.TextToTokenIds("<start_of_audio>"));
   if (IsGemma3nModel(start_turn_text, audio_token_ids)) {
     PopulateDefaultGemma3N(*model_type.mutable_gemma3n());
     return model_type;
@@ -81,20 +76,11 @@ absl::StatusOr<proto::LlmModelType> CreateModelType(
 }  // namespace
 
 absl::StatusOr<proto::LlmModelType> InferLlmModelType(
-    const proto::LlmMetadata& metadata, Tokenizer* tokenizer) {
-  if (metadata.has_llm_model_type()) {
-    return metadata.llm_model_type();
-  }
-
-  if (tokenizer == nullptr) {
-    proto::LlmModelType model_type;
-    model_type.mutable_generic_model();
-    return model_type;
-  }
-
+    const proto::LlmMetadata& metadata, Tokenizer& tokenizer) {
   proto::LlmModelType model_type;
+  model_type.mutable_generic_model();
   for (int token_id : kStartTurnTokenIdsToCheck) {
-    auto start_turn_text = tokenizer->TokenIdsToText({token_id});
+    auto start_turn_text = tokenizer.TokenIdsToText({token_id});
     if (!start_turn_text.ok()) {
       if (start_turn_text.status().code() == absl::StatusCode::kDataLoss) {
         // If the error is DataLoss, it means the start turn token id coincides
@@ -107,7 +93,6 @@ absl::StatusOr<proto::LlmModelType> InferLlmModelType(
         // If the error is NotFound, it means the start turn token id is out of
         // range, indicating the model is a fake one that runs in unittest.
         // Return default model type.
-        model_type.mutable_generic_model();
         return model_type;
       } else {
         return start_turn_text.status();

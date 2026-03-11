@@ -85,7 +85,7 @@ TEST(EngineSettingsTest, MainExecutorSettingsGetModelPath) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets, Backend::CPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   auto model_path =
       settings->GetMainExecutorSettings().GetModelAssets().GetPath();
@@ -97,7 +97,7 @@ TEST(EngineSettingsTest, MainExecutorSettingsSetAndGetCacheDir) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets, Backend::CPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   settings->GetMutableMainExecutorSettings().SetCacheDir("test_cache_dir");
   EXPECT_EQ(settings->GetMainExecutorSettings().GetCacheDir(),
             "test_cache_dir");
@@ -108,7 +108,7 @@ TEST(EngineSettingsTest, MainExecutorSettingsSetAndGetMaxNumTokens) {
   ASSERT_OK(model_assets);
 
   auto settings = EngineSettings::CreateDefault(*model_assets, Backend::CPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   settings->GetMutableMainExecutorSettings().SetMaxNumTokens(128);
   EXPECT_EQ(settings->GetMainExecutorSettings().GetMaxNumTokens(), 128);
 }
@@ -118,7 +118,7 @@ TEST(EngineSettingsTest, MainExecutorSettingsSetAndGetExecutorBackend) {
   ASSERT_OK(model_assets);
 
   auto settings = EngineSettings::CreateDefault(*model_assets, Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_OK(
       settings->GetMutableMainExecutorSettings().SetBackend(Backend::GPU));
   EXPECT_THAT(settings->GetMainExecutorSettings().GetBackend(),
@@ -129,7 +129,7 @@ TEST(EngineSettingsTest, MainExecutorSettingsDefaultExecutorBackend) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_THAT(settings->GetMainExecutorSettings().GetBackend(),
               Eq(Backend::CPU));
 }
@@ -138,7 +138,7 @@ TEST(EngineSettingsTest, VisionExecutorSettingsNotSet) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets, Backend::CPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_FALSE(settings->GetVisionExecutorSettings().has_value());
 }
 
@@ -147,7 +147,7 @@ TEST(EngineSettingsTest, VisionExecutorSettingsSetAndGetBackend) {
   ASSERT_OK(model_assets);
   auto settings =
       EngineSettings::CreateDefault(*model_assets, Backend::CPU, Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   ASSERT_TRUE(settings->GetVisionExecutorSettings().has_value());
   EXPECT_EQ(settings->GetVisionExecutorSettings()->GetBackend(), Backend::GPU);
 
@@ -161,7 +161,7 @@ TEST(EngineSettingsTest, VisionExecutorSettingsSetAndGetCacheDir) {
   ASSERT_OK(model_assets);
   auto settings =
       EngineSettings::CreateDefault(*model_assets, Backend::CPU, Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   ASSERT_TRUE(settings->GetVisionExecutorSettings().has_value());
   settings->GetMutableVisionExecutorSettings()->SetCacheDir("vision_cache_dir");
   EXPECT_EQ(settings->GetVisionExecutorSettings()->GetCacheDir(),
@@ -173,7 +173,7 @@ TEST(EngineSettingsTest, VisionExecutorSettingsGetModelPath) {
   ASSERT_OK(model_assets);
   auto settings =
       EngineSettings::CreateDefault(*model_assets, Backend::CPU, Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   ASSERT_TRUE(settings->GetVisionExecutorSettings().has_value());
   auto model_path =
       settings->GetVisionExecutorSettings()->GetModelAssets().GetPath();
@@ -238,7 +238,7 @@ TEST(EngineSettingsTest, VisionAudioBackendConstraintNoConstraint) {
   auto settings = EngineSettings::CreateDefault(
       *model_assets, /*backend=*/Backend::CPU, /*vision_backend=*/Backend::GPU,
       /*audio_backend=*/Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
@@ -246,7 +246,7 @@ TEST(EngineSettingsTest, VisionAudioBackendConstraintNoConstraint) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   // No vision backend constraint means it's compatible with all backends, so it
   // should be OK even if the vision / audio models requires a backend.
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, nullptr, "",
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, nullptr, "",
                                              /*text_backend_constraint=*/{},
                                              /*vision_backend_constraint=*/{},
                                              /*audio_backend_constraint=*/{}));
@@ -257,7 +257,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMatch) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(
       *model_assets, /*backend=*/Backend::CPU, /*vision_backend=*/Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
@@ -266,7 +266,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMatch) {
   // The vision backend constraint matches the vision model backend, so it
   // should be OK.
   EXPECT_OK(settings->MaybeUpdateAndValidate(
-      &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+      tokenizer, nullptr, "", /*text_backend_constraint=*/{},
       /*vision_backend_constraint=*/"gpu",
       /*audio_backend_constraint=*/{}));
 }
@@ -276,7 +276,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMatchCaseInsensitive) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(
       *model_assets, /*backend=*/Backend::CPU, /*vision_backend=*/Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
@@ -285,7 +285,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMatchCaseInsensitive) {
   // The vision backend constraint matches (case insensitive) the vision model
   // backend, so it should be OK.
   EXPECT_OK(settings->MaybeUpdateAndValidate(
-      &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+      tokenizer, nullptr, "", /*text_backend_constraint=*/{},
       /*vision_backend_constraint=*/"GPU",
       /*audio_backend_constraint=*/{}));
 }
@@ -295,7 +295,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMultiMatch) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(
       *model_assets, /*backend=*/Backend::CPU, /*vision_backend=*/Backend::NPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
@@ -304,7 +304,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMultiMatch) {
   // The vision backend constraint matches one of the vision model backends,
   // NPU in this case, so it should be OK.
   EXPECT_OK(settings->MaybeUpdateAndValidate(
-      &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+      tokenizer, nullptr, "", /*text_backend_constraint=*/{},
       /*vision_backend_constraint=*/"gpu,npu",
       /*audio_backend_constraint=*/{}));
 }
@@ -314,7 +314,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintNoMatch) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(
       *model_assets, /*backend=*/Backend::CPU, /*vision_backend=*/Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
@@ -323,7 +323,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintNoMatch) {
   // The vision backend constraint does not match the vision model backend, so
   // it should be an error.
   EXPECT_THAT(settings->MaybeUpdateAndValidate(
-                  &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+                  tokenizer, nullptr, "", /*text_backend_constraint=*/{},
                   /*vision_backend_constraint=*/"npu",
                   /*audio_backend_constraint=*/{}),
               StatusIs(absl::StatusCode::kInvalidArgument));
@@ -334,7 +334,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMultiNoMatch) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(
       *model_assets, /*backend=*/Backend::CPU, /*vision_backend=*/Backend::GPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
@@ -343,7 +343,7 @@ TEST(EngineSettingsTest, VisionBackendConstraintMultiNoMatch) {
   // The vision backend constraint does not match any of the vision model
   // backends, so it should be an error.
   EXPECT_THAT(settings->MaybeUpdateAndValidate(
-                  &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+                  tokenizer, nullptr, "", /*text_backend_constraint=*/{},
                   /*vision_backend_constraint=*/"cpu,npu",
                   /*audio_backend_constraint=*/{}),
               StatusIs(absl::StatusCode::kInvalidArgument));
@@ -364,7 +364,7 @@ TEST(EngineSettingsTest, AudioBackendConstraintNoConstraint) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   // No audio backend constraint means it's compatible with all backends, so it
   // should be OK even if the audio models requires a backend.
-  EXPECT_OK(settings.MaybeUpdateAndValidate(&tokenizer, nullptr, "",
+  EXPECT_OK(settings.MaybeUpdateAndValidate(tokenizer, nullptr, "",
                                             /*text_backend_constraint=*/{},
                                             /*vision_backend_constraint=*/{},
                                             /*audio_backend_constraint=*/{}));
@@ -387,7 +387,7 @@ TEST(EngineSettingsTest, AudioBackendConstraintMatch) {
   // The audio backend constraint matches the audio model backend, so it should
   // be OK.
   EXPECT_OK(settings.MaybeUpdateAndValidate(
-      &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+      tokenizer, nullptr, "", /*text_backend_constraint=*/{},
       /*vision_backend_constraint=*/{}, /*audio_backend_constraint=*/"cpu"));
 }
 
@@ -407,7 +407,7 @@ TEST(EngineSettingsTest, AudioBackendConstraintMatchCaseInsensitive) {
   // The audio backend constraint matches (case insensitive) the audio model
   // backend, so it should be OK.
   EXPECT_OK(settings.MaybeUpdateAndValidate(
-      &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+      tokenizer, nullptr, "", /*text_backend_constraint=*/{},
       /*vision_backend_constraint=*/{}, /*audio_backend_constraint=*/"CPU"));
 }
 
@@ -427,7 +427,7 @@ TEST(EngineSettingsTest, AudioBackendConstraintMultiMatch) {
   // The audio backend constraint matches one of the audio model backends, CPU
   // in this case, so it should be OK.
   EXPECT_OK(settings.MaybeUpdateAndValidate(
-      &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+      tokenizer, nullptr, "", /*text_backend_constraint=*/{},
       /*vision_backend_constraint=*/{},
       /*audio_backend_constraint=*/"gpu,cpu"));
 }
@@ -448,7 +448,7 @@ TEST(EngineSettingsTest, AudioBackendConstraintNoMatch) {
   // The audio backend constraint does not match the audio model backend, so
   // it should be an error.
   EXPECT_THAT(settings.MaybeUpdateAndValidate(
-                  &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+                  tokenizer, nullptr, "", /*text_backend_constraint=*/{},
                   /*vision_backend_constraint=*/{},
                   /*audio_backend_constraint=*/"npu"),
               StatusIs(absl::StatusCode::kInvalidArgument));
@@ -471,7 +471,7 @@ TEST(EngineSettingsTest, AudioBackendConstraintMultiNoMatch) {
   // The audio backend constraint does not match any of the audio model
   // backends, so it should be an error.
   EXPECT_THAT(settings.MaybeUpdateAndValidate(
-                  &tokenizer, nullptr, "", /*text_backend_constraint=*/{},
+                  tokenizer, nullptr, "", /*text_backend_constraint=*/{},
                   /*vision_backend_constraint=*/{},
                   /*audio_backend_constraint=*/"gpu,npu"),
               StatusIs(absl::StatusCode::kInvalidArgument));
@@ -493,7 +493,7 @@ TEST(EngineSettingsTest, TextBackendConstraintNoMatch) {
   // The text backend constraint does not match the text model backend, so
   // it should be an error.
   EXPECT_THAT(settings.MaybeUpdateAndValidate(
-                  &tokenizer, nullptr, "", /*text_backend_constraint=*/"gpu"),
+                  tokenizer, nullptr, "", /*text_backend_constraint=*/"gpu"),
               StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
@@ -501,7 +501,7 @@ TEST(EngineSettingsTest, BenchmarkParams) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_FALSE(settings->IsBenchmarkEnabled());
 
   proto::BenchmarkParams& benchmark_params =
@@ -526,7 +526,7 @@ TEST(EngineSettingsTest, BenchmarkParamsUpdateAdvancedSettings) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings.MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings.MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   EXPECT_FALSE(
       settings.GetMainExecutorSettings().GetAdvancedSettings()->is_benchmark);
 
@@ -535,7 +535,7 @@ TEST(EngineSettingsTest, BenchmarkParamsUpdateAdvancedSettings) {
   benchmark_params.set_num_decode_tokens(100);
   benchmark_params.set_num_prefill_tokens(100);
 
-  EXPECT_OK(settings.MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings.MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   EXPECT_TRUE(
       settings.GetMainExecutorSettings().GetAdvancedSettings()->is_benchmark);
 }
@@ -544,7 +544,7 @@ TEST(EngineSettingsTest, LlmMetadata) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_FALSE(settings->GetLlmMetadata().has_value());
 
   proto::LlmMetadata& llm_metadata = settings->GetMutableLlmMetadata();
@@ -594,7 +594,7 @@ TEST(EngineSettingsTest, MaybeUpdateAndValidate) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
@@ -603,7 +603,7 @@ TEST(EngineSettingsTest, MaybeUpdateAndValidate) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   EXPECT_OK(IsExpectedLlmMetadata(settings->GetLlmMetadata().value()));
 }
 
@@ -611,7 +611,7 @@ TEST(EngineSettingsTest, MaybeUpdateAndValidateTokenToIdReturnsError) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
@@ -621,7 +621,7 @@ TEST(EngineSettingsTest, MaybeUpdateAndValidateTokenToIdReturnsError) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   EXPECT_OK(IsExpectedLlmMetadata(settings->GetLlmMetadata().value()));
 }
 
@@ -629,7 +629,7 @@ TEST(EngineSettingsTest, MaybeUpdateAndValidateNPU) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets, Backend::NPU);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
@@ -638,7 +638,7 @@ TEST(EngineSettingsTest, MaybeUpdateAndValidateNPU) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   EXPECT_EQ(settings->GetLlmMetadata().value().sampler_params().type(),
             proto::SamplerParameters::TOP_P);
 }
@@ -659,7 +659,7 @@ TEST(EngineSettingsTest, PrintOperator) {
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   proto::LlmMetadata& llm_metadata = settings->GetMutableLlmMetadata();
   llm_metadata.mutable_start_token()->set_token_str("test_token_str");
   proto::BenchmarkParams& benchmark_params =
@@ -763,7 +763,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidate) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
   auto session_config = SessionConfig::CreateDefault();
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   // We didn't call MaybeUpdateAndValidate on EngineSettings, so some of the
   // required fields are not set. So the validation should fail.
   EXPECT_THAT(session_config.MaybeUpdateAndValidate(*settings),
@@ -776,7 +776,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidate) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   // The validation should pass now.
   EXPECT_OK(session_config.MaybeUpdateAndValidate(*settings));
   EXPECT_EQ(session_config.GetSamplerBackend(), Backend::CPU);
@@ -791,7 +791,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidatePickGpuAsSamplerBackend) {
   EXPECT_OK(
       settings->GetMutableMainExecutorSettings().SetBackend(Backend::GPU));
   auto session_config = SessionConfig::CreateDefault();
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   // We didn't call MaybeUpdateAndValidate on EngineSettings, so some of the
   // required fields are not set. So the validation should fail.
   EXPECT_THAT(session_config.MaybeUpdateAndValidate(*settings),
@@ -804,7 +804,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidatePickGpuAsSamplerBackend) {
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   // The validation should pass now.
   EXPECT_OK(session_config.MaybeUpdateAndValidate(*settings));
   EXPECT_EQ(session_config.GetSamplerBackend(), Backend::GPU);
@@ -815,7 +815,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidateMaxNumTokens) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
   auto session_config = SessionConfig::CreateDefault();
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_EQ(settings->GetMainExecutorSettings().GetMaxNumTokens(), 0);
 
   MockTokenizer tokenizer;
@@ -826,11 +826,11 @@ TEST(SessionConfigTest, MaybeUpdateAndValidateMaxNumTokens) {
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
   llm_metadata.set_max_num_tokens(1280);
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   EXPECT_EQ(settings->GetMainExecutorSettings().GetMaxNumTokens(), 1280);
 
   llm_metadata.set_max_num_tokens(4096);
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   EXPECT_EQ(settings->GetMainExecutorSettings().GetMaxNumTokens(), 1280);
 }
 
@@ -841,7 +841,7 @@ TEST(SessionConfigTest,
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
   auto session_config = SessionConfig::CreateDefault();
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_EQ(settings->GetMainExecutorSettings().GetMaxNumTokens(), 0);
 
   MockTokenizer tokenizer;
@@ -851,7 +851,7 @@ TEST(SessionConfigTest,
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata, " "));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata, " "));
   const auto& main_settings1 = settings->GetMainExecutorSettings();
   EXPECT_EQ(main_settings1.GetMaxNumTokens(), 4096);
   EXPECT_TRUE(main_settings1.GetAdvancedSettings().has_value());
@@ -868,7 +868,7 @@ TEST(SessionConfigTest,
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
   auto session_config = SessionConfig::CreateDefault();
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   EXPECT_EQ(settings->GetMainExecutorSettings().GetMaxNumTokens(), 0);
 
   MockTokenizer tokenizer;
@@ -878,7 +878,7 @@ TEST(SessionConfigTest,
   EXPECT_CALL(tokenizer, TokenToId).WillRepeatedly(Return(1));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata, " "));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata, " "));
   const auto& main_settings1 = settings->GetMainExecutorSettings();
   EXPECT_EQ(main_settings1.GetMaxNumTokens(), 8192);
   EXPECT_TRUE(main_settings1.GetAdvancedSettings().has_value());
@@ -893,7 +893,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidateLlmGemma3N) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
   auto session_config = SessionConfig::CreateDefault();
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   // We didn't call MaybeUpdateAndValidate on EngineSettings, so some of the
   // required fields are not set. So the validation should fail.
   EXPECT_THAT(session_config.MaybeUpdateAndValidate(*settings),
@@ -912,7 +912,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidateLlmGemma3N) {
       .WillRepeatedly(Return(std::vector<int>({256000})));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   // The validation should pass now.
   EXPECT_OK(session_config.MaybeUpdateAndValidate(*settings));
   EXPECT_EQ(session_config.GetSamplerBackend(), Backend::CPU);
@@ -925,7 +925,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidateLlmGemma3) {
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
   auto session_config = SessionConfig::CreateDefault();
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
   // We didn't call MaybeUpdateAndValidate on EngineSettings, so some of the
   // required fields are not set. So the validation should fail.
   EXPECT_THAT(session_config.MaybeUpdateAndValidate(*settings),
@@ -946,7 +946,7 @@ TEST(SessionConfigTest, MaybeUpdateAndValidateLlmGemma3) {
           std::vector<int>{236820, 3041, 236779, 1340, 236779, 20156, 236813}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
 
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
   // The validation should pass now.
   EXPECT_OK(session_config.MaybeUpdateAndValidate(*settings));
   EXPECT_EQ(session_config.GetSamplerBackend(), Backend::CPU);
@@ -980,7 +980,7 @@ TEST(SessionConfigTest,
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
@@ -988,7 +988,7 @@ TEST(SessionConfigTest,
   EXPECT_CALL(tokenizer, TextToTokenIds)
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
 
   // SessionConfig has no promptTemplate: Use default from llm metadata.
   auto session_config = SessionConfig::CreateDefault();
@@ -1003,7 +1003,7 @@ TEST(SessionConfigTest,
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
@@ -1011,7 +1011,7 @@ TEST(SessionConfigTest,
   EXPECT_CALL(tokenizer, TextToTokenIds)
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
 
   // SessionConfig has non-empty template: Use that.
   auto session_config = SessionConfig::CreateDefault();
@@ -1029,7 +1029,7 @@ TEST(SessionConfigTest,
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
@@ -1037,7 +1037,7 @@ TEST(SessionConfigTest,
   EXPECT_CALL(tokenizer, TextToTokenIds)
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
 
   // SessionConfig has non-empty template: Use that.
   auto session_config = SessionConfig::CreateDefault();
@@ -1053,7 +1053,7 @@ TEST(SessionConfigTest,
   auto model_assets = ModelAssets::Create("test_model_path_1");
   ASSERT_OK(model_assets);
   auto settings = EngineSettings::CreateDefault(*model_assets);
-  ASSERT_OK(settings);
+  EXPECT_OK(settings);
 
   MockTokenizer tokenizer;
   EXPECT_CALL(tokenizer, TokenIdsToText).WillRepeatedly(Return("fake_text"));
@@ -1062,7 +1062,7 @@ TEST(SessionConfigTest,
       .WillRepeatedly(Return(std::vector<int>{1}));
   proto::LlmMetadata llm_metadata = CreateLlmMetadata();
   llm_metadata.clear_prompt_templates();
-  EXPECT_OK(settings->MaybeUpdateAndValidate(&tokenizer, &llm_metadata));
+  EXPECT_OK(settings->MaybeUpdateAndValidate(tokenizer, &llm_metadata));
 
   // LlmMetadata has no promptTemplate: SessionConfig template remains default.
   auto session_config = SessionConfig::CreateDefault();

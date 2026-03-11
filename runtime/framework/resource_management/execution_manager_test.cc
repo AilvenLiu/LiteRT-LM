@@ -91,7 +91,7 @@ class ExecutionManagerTest : public ::testing::Test {
         ->mutable_ids()
         ->Add(6);
     llm_metadata.mutable_llm_model_type()->mutable_gemma3n();
-    EXPECT_OK(settings.MaybeUpdateAndValidate(tokenizer_.get(), &llm_metadata));
+    EXPECT_OK(settings.MaybeUpdateAndValidate(*tokenizer_, &llm_metadata));
     SessionConfig session_config = SessionConfig::CreateDefault();
     EXPECT_OK(session_config.MaybeUpdateAndValidate(settings));
     session_config.SetUseExternalSampler(use_external_sampler);

@@ -15,7 +15,6 @@
 // TODO(b/417209286): Remove this once the model assets are stored in the
 // litertlm file format.
 #include <filesystem>  // NOLINT: Required for path manipulation.
-#include <future>      // NOLINT(build/c++11)
 #include <memory>
 #include <optional>
 #include <string>
@@ -239,7 +238,6 @@ class EngineImpl : public Engine {
 // Method to create Engine.
 absl::StatusOr<std::unique_ptr<Engine>> EngineImpl::Create(
     EngineSettings engine_settings, absl::string_view input_prompt_as_hint) {
-  ABSL_LOG(INFO) << "EngineImpl::Create";
   std::optional<BenchmarkInfo> benchmark_info =
       engine_settings.IsBenchmarkEnabled()
           ? std::make_optional<BenchmarkInfo>(
@@ -263,62 +261,33 @@ absl::StatusOr<std::unique_ptr<Engine>> EngineImpl::Create(
 
   if (benchmark_info.has_value()) {
     RETURN_IF_ERROR(benchmark_info->TimeInitPhaseStart(
+        BenchmarkInfo::InitPhase::kTokenizer));
+  }
+  ASSIGN_OR_RETURN(std::unique_ptr<Tokenizer> tokenizer,
+                   model_resources->GetTokenizer());
+  if (benchmark_info.has_value()) {
+    RETURN_IF_ERROR(
+        benchmark_info->TimeInitPhaseEnd(BenchmarkInfo::InitPhase::kTokenizer));
+  }
+
+  if (benchmark_info.has_value()) {
+    RETURN_IF_ERROR(benchmark_info->TimeInitPhaseStart(
         BenchmarkInfo::InitPhase::kLlmMetadata));
   }
   ASSIGN_OR_RETURN(auto* llm_metadata, model_resources->GetLlmMetadata());
+  // Update and load the parameters from the model file and convert the
+  // tokens to ids.
+  RETURN_IF_ERROR(engine_settings.MaybeUpdateAndValidate(
+      *tokenizer, llm_metadata, input_prompt_as_hint,
+      model_resources->GetTFLiteModelBackendConstraint(
+          ModelType::kTfLitePrefillDecode),
+      model_resources->GetTFLiteModelBackendConstraint(
+          ModelType::kTfLiteVisionEncoder),
+      model_resources->GetTFLiteModelBackendConstraint(
+          ModelType::kTfLiteAudioEncoderHw)));
   if (benchmark_info.has_value()) {
     RETURN_IF_ERROR(benchmark_info->TimeInitPhaseEnd(
         BenchmarkInfo::InitPhase::kLlmMetadata));
-  }
-  bool hasLlmModelType = llm_metadata->has_llm_model_type();
-  // This lambda is used to create the tokenizer asynchronously if the model
-  // type is available, such that the tokenizer can be created in parallel with
-  // the executor.
-  auto create_tokenizer =
-      [&benchmark_info,
-       &model_resources]() -> absl::StatusOr<std::unique_ptr<Tokenizer>> {
-    if (benchmark_info.has_value()) {
-      RETURN_IF_ERROR(benchmark_info->TimeInitPhaseStart(
-          BenchmarkInfo::InitPhase::kTokenizer));
-    }
-    ASSIGN_OR_RETURN(std::unique_ptr<Tokenizer> tokenizer,
-                     model_resources->GetTokenizer());
-    if (benchmark_info.has_value()) {
-      RETURN_IF_ERROR(benchmark_info->TimeInitPhaseEnd(
-          BenchmarkInfo::InitPhase::kTokenizer));
-    }
-    return tokenizer;
-  };
-  std::future<absl::StatusOr<std::unique_ptr<Tokenizer>>> tokenizer_future;
-  std::unique_ptr<Tokenizer> tokenizer;
-  if (!hasLlmModelType) {
-    ABSL_LOG(INFO)
-        << "Legacy model file don't have LlmModelType, loading tokenizer now";
-    ASSIGN_OR_RETURN(tokenizer, create_tokenizer());
-    // Update and load the parameters from the model file and convert the
-    // tokens to ids.
-    RETURN_IF_ERROR(engine_settings.MaybeUpdateAndValidate(
-        tokenizer.get(), llm_metadata, input_prompt_as_hint,
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLitePrefillDecode),
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLiteVisionEncoder),
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLiteAudioEncoderHw)));
-  } else {
-    // If the model type is available, wait for the tokenizer to be created
-    // after the model is loaded.
-    ABSL_LOG(INFO)
-        << "New model file have LlmModelType, loading tokenizer asynchronously";
-    tokenizer_future = std::async(std::launch::async, create_tokenizer);
-    RETURN_IF_ERROR(engine_settings.MaybeUpdateAndValidate(
-        nullptr, llm_metadata, input_prompt_as_hint,
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLitePrefillDecode),
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLiteVisionEncoder),
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLiteAudioEncoderHw)));
   }
 
   if (benchmark_info.has_value()) {
@@ -360,23 +329,6 @@ absl::StatusOr<std::unique_ptr<Engine>> EngineImpl::Create(
   if (benchmark_info.has_value()) {
     RETURN_IF_ERROR(
         benchmark_info->TimeInitPhaseEnd(BenchmarkInfo::InitPhase::kExecutor));
-  }
-
-  if (hasLlmModelType) {
-    // Now load the tokenizer and update the engine settings.
-    ASSIGN_OR_RETURN(tokenizer, tokenizer_future.get());
-    RETURN_IF_ERROR(engine_settings.MaybeUpdateAndValidate(
-        tokenizer.get(), llm_metadata, input_prompt_as_hint,
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLitePrefillDecode),
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLiteVisionEncoder),
-        model_resources->GetTFLiteModelBackendConstraint(
-            ModelType::kTfLiteAudioEncoderHw)));
-    // As we load the tokenizer asynchronously, we need to update the executor
-    // settings after the tokenizer is loaded.
-    RETURN_IF_ERROR(executor->UpdateExecutorSettings(
-        engine_settings.GetMainExecutorSettings()));
   }
 
   // Creating the thread pool of a single thread to execute the works.

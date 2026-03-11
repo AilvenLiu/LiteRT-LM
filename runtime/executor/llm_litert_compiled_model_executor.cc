@@ -1399,12 +1399,6 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::SampleLogits(
   return absl::OkStatus();
 }
 
-absl::Status LlmLiteRtCompiledModelExecutorBase::UpdateExecutorSettings(
-    const LlmExecutorSettings& executor_settings) {
-  executor_settings_ = executor_settings;
-  return absl::OkStatus();
-}
-
 absl::Status LlmLiteRtCompiledModelExecutorBase::SetCurrentStep(int new_step) {
   ASSIGN_OR_RETURN(auto old_step, GetCurrentStep());
   if (old_step == new_step) {

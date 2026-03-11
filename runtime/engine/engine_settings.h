@@ -85,7 +85,7 @@ class EngineSettings {
   // assets. The function also validates to check if all of the required fields
   // are set correctly. Returns an error if the validation fails.
   absl::Status MaybeUpdateAndValidate(
-      Tokenizer* tokenizer,
+      Tokenizer& tokenizer,
       const proto::LlmMetadata* absl_nullable metadata_from_file,
       absl::string_view input_prompt_as_hint = "",
       const std::optional<std::string>& text_backend_constraint = std::nullopt,
