@@ -20,6 +20,7 @@ import abc
 import collections.abc
 import dataclasses
 import enum
+import pathlib
 from typing import Any
 
 
@@ -102,6 +103,10 @@ class AbstractConversation(abc.ABC):
         An iterator yielding dictionaries containing chunks of the model's
         response.
     """
+
+  def cancel_process(self) -> None:
+    """Cancels the current inference process."""
+    pass
 
 
 @dataclasses.dataclass

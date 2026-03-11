@@ -940,6 +940,28 @@ cc_test(
     ],
 )
 
+cc_library(
+    name = "llm_litert_mtp_drafter",
+    srcs = ["llm_litert_mtp_drafter.cc"],
+    hdrs = ["llm_litert_mtp_drafter.h"],
+    deps = [
+        ":llm_executor_settings",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:string_view",
+        "//runtime/components:sampler",
+    ] + select({
+        "@litert//litert:litert_link_capi_so": [
+            "@litert//litert/cc:litert_api_with_dynamic_runtime",
+        ],
+        "//conditions:default": [
+            "@litert//litert/cc:litert_compiled_model",
+            "@litert//litert/cc:litert_tensor_buffer",
+        ],
+    }),
+)
+
 # ==================================================================================================
 # Interfaces
 # ==================================================================================================

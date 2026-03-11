@@ -251,10 +251,15 @@ class Benchmark {
   }
 
  private:
+  // Path to the model file.
   std::string model_path_;
+  // Hardware backend used for inference.
   Backend backend_;
+  // Number of tokens for the prefill phase.
   int prefill_tokens_;
+  // Number of tokens for the decode phase.
   int decode_tokens_;
+  // Directory for caching compiled model artifacts.
   std::string cache_dir_;
 };
 

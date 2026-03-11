@@ -39,9 +39,9 @@ internal object LiteRtLmJni {
    * @param enableBenchmark Whether to enable benchmark mode or not.
    * @param cacheDir The directory for cache files.
    * @param enableBenchmark Whether to enable benchmark or not.
-   * @param mainNativeLibraryDir The directory for the main backend NPU libraries.
-   * @param visionNativeLibraryDir The directory for the vision backend NPU libraries.
-   * @param audioNativeLibraryDir The directory for the audio backend NPU libraries.
+   * @param mainNpuNativeLibraryDir The directory for the main backend NPU libraries.
+   * @param visionNpuNativeLibraryDir The directory for the vision backend NPU libraries.
+   * @param audioNpuNativeLibraryDir The directory for the audio backend NPU libraries.
    * @param mainBackendNumThreads The number of threads for the main backend (CPU).
    * @param audioBackendNumThreads The number of threads for the audio backend (CPU).
    * @return A pointer to the native engine instance.
@@ -54,9 +54,9 @@ internal object LiteRtLmJni {
     maxNumTokens: Int,
     cacheDir: String,
     enableBenchmark: Boolean,
-    mainNativeLibraryDir: String,
-    visionNativeLibraryDir: String,
-    audioNativeLibraryDir: String,
+    mainNpuNativeLibraryDir: String,
+    visionNpuNativeLibraryDir: String,
+    audioNpuNativeLibraryDir: String,
     mainBackendNumThreads: Int,
     audioBackendNumThreads: Int,
   ): Long
@@ -69,6 +69,7 @@ internal object LiteRtLmJni {
    * @param prefillTokens The number of tokens to prefill.
    * @param decodeTokens The number of tokens to decode.
    * @param cacheDir The directory for cache files.
+   * @param mainNpuNativeLibraryDir The directory for the main backend NPU libraries.
    * @return A pointer to the native engine instance.
    */
   external fun nativeCreateBenchmark(
@@ -77,6 +78,7 @@ internal object LiteRtLmJni {
     prefillTokens: Int,
     decodeTokens: Int,
     cacheDir: String,
+    mainNpuNativeLibraryDir: String,
   ): Long
 
   /**
