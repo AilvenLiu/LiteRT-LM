@@ -529,7 +529,8 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
 
 LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateBenchmark)(
     JNIEnv* env, jclass thiz, jstring model_path, jstring backend,
-    jint prefill_tokens, jint decode_tokens, jstring cache_dir) {
+    jint prefill_tokens, jint decode_tokens, jstring cache_dir,
+    jstring main_native_library_dir) {
   const char* model_path_chars = env->GetStringUTFChars(model_path, nullptr);
   std::string model_path_str(model_path_chars);
   env->ReleaseStringUTFChars(model_path, model_path_chars);
@@ -575,6 +576,16 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateBenchmark)(
   auto& benchmark_params = settings->GetMutableBenchmarkParams();
   benchmark_params.set_num_prefill_tokens(prefill_tokens);
   benchmark_params.set_num_decode_tokens(decode_tokens);
+
+  const char* main_native_library_dir_chars =
+      env->GetStringUTFChars(main_native_library_dir, nullptr);
+  std::string main_native_library_dir_str(main_native_library_dir_chars);
+  env->ReleaseStringUTFChars(main_native_library_dir,
+                             main_native_library_dir_chars);
+  if (!main_native_library_dir_str.empty()) {
+    settings->GetMutableMainExecutorSettings().SetLitertDispatchLibDir(
+        main_native_library_dir_str);
+  }
 
   auto engine = EngineFactory::CreateAny(*settings);
   if (!engine.ok()) {
