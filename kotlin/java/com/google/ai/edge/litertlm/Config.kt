@@ -41,6 +41,16 @@ sealed class Backend(val name: String) {
 }
 
 /**
+ * Returns the directory containing the native libraries for the NPU backend. Returns an empty
+ * string if not applicable.
+ */
+internal fun Backend.NPU.getNativeLibraryDir(): String {
+  @OptIn(ExperimentalApi::class)
+  // Uses ExperimentalFlags.npuLibrariesDir for backward compatibility.
+  return this.nativeLibraryDir.ifEmpty { ExperimentalFlags.npuLibrariesDir }
+}
+
+/**
  * Configuration for the LiteRT-LM engine.
  *
  * @property modelPath The file path to the LiteRT-LM model.

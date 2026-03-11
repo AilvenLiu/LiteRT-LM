@@ -68,13 +68,6 @@ class Engine(val engineConfig: EngineConfig) : AutoCloseable {
         (engineConfig.audioBackend as? Backend.CPU)?.numOfThreads?.let { if (it > 0) it else -1 }
           ?: -1
 
-      @OptIn(ExperimentalApi::class)
-      fun getNativeLibraryDir(backend: Backend?): String {
-        if (backend !is Backend.NPU) return ""
-        // Uses ExperimentalFlags.npuLibrariesDir for backward compatibility.
-        return backend.nativeLibraryDir.ifEmpty { ExperimentalFlags.npuLibrariesDir }
-      }
-
       handle =
         LiteRtLmJni.nativeCreateEngine(
           engineConfig.modelPath,
@@ -86,9 +79,9 @@ class Engine(val engineConfig: EngineConfig) : AutoCloseable {
           engineConfig.maxNumTokens ?: -1,
           engineConfig.cacheDir ?: "",
           @OptIn(ExperimentalApi::class) ExperimentalFlags.enableBenchmark,
-          getNativeLibraryDir(engineConfig.backend),
-          getNativeLibraryDir(engineConfig.visionBackend),
-          getNativeLibraryDir(engineConfig.audioBackend),
+          (engineConfig.backend as? Backend.NPU)?.getNativeLibraryDir() ?: "",
+          (engineConfig.visionBackend as? Backend.NPU)?.getNativeLibraryDir() ?: "",
+          (engineConfig.audioBackend as? Backend.NPU)?.getNativeLibraryDir() ?: "",
           mainBackendNumThreads,
           audioBackendNumThreads,
         )

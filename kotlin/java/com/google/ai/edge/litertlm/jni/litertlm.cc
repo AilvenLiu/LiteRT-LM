@@ -375,8 +375,8 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
     JNIEnv* env, jclass thiz, jstring model_path, jstring backend,
     jstring vision_backend, jstring audio_backend, jint max_num_tokens,
     jstring cache_dir, jboolean enable_benchmark,
-    jstring main_native_library_dir, jstring vision_native_library_dir,
-    jstring audio_native_library_dir, jint main_backend_num_threads,
+    jstring main_npu_native_library_dir, jstring vision_npu_native_library_dir,
+    jstring audio_npu_native_library_dir, jint main_backend_num_threads,
     jint audio_backend_num_threads) {
   const char* model_path_chars = env->GetStringUTFChars(model_path, nullptr);
   std::string model_path_str(model_path_chars);
@@ -462,36 +462,39 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
     }
   }
 
-  const char* main_native_library_dir_chars =
-      env->GetStringUTFChars(main_native_library_dir, nullptr);
-  std::string main_native_library_dir_str(main_native_library_dir_chars);
-  env->ReleaseStringUTFChars(main_native_library_dir,
-                             main_native_library_dir_chars);
-  if (!main_native_library_dir_str.empty()) {
+  const char* main_npu_native_library_dir_chars =
+      env->GetStringUTFChars(main_npu_native_library_dir, nullptr);
+  std::string main_npu_native_library_dir_str(
+      main_npu_native_library_dir_chars);
+  env->ReleaseStringUTFChars(main_npu_native_library_dir,
+                             main_npu_native_library_dir_chars);
+  if (!main_npu_native_library_dir_str.empty()) {
     settings->GetMutableMainExecutorSettings().SetLitertDispatchLibDir(
-        main_native_library_dir_str);
+        main_npu_native_library_dir_str);
   }
 
-  const char* vision_native_library_dir_chars =
-      env->GetStringUTFChars(vision_native_library_dir, nullptr);
-  std::string vision_native_library_dir_str(vision_native_library_dir_chars);
-  env->ReleaseStringUTFChars(vision_native_library_dir,
-                             vision_native_library_dir_chars);
-  if (!vision_native_library_dir_str.empty() &&
+  const char* vision_npu_native_library_dir_chars =
+      env->GetStringUTFChars(vision_npu_native_library_dir, nullptr);
+  std::string vision_npu_native_library_dir_str(
+      vision_npu_native_library_dir_chars);
+  env->ReleaseStringUTFChars(vision_npu_native_library_dir,
+                             vision_npu_native_library_dir_chars);
+  if (!vision_npu_native_library_dir_str.empty() &&
       vision_backend_optional.has_value()) {
     settings->GetMutableVisionExecutorSettings()->SetLitertDispatchLibDir(
-        vision_native_library_dir_str);
+        vision_npu_native_library_dir_str);
   }
 
-  const char* audio_native_library_dir_chars =
-      env->GetStringUTFChars(audio_native_library_dir, nullptr);
-  std::string audio_native_library_dir_str(audio_native_library_dir_chars);
-  env->ReleaseStringUTFChars(audio_native_library_dir,
-                             audio_native_library_dir_chars);
-  if (!audio_native_library_dir_str.empty() &&
+  const char* audio_npu_native_library_dir_chars =
+      env->GetStringUTFChars(audio_npu_native_library_dir, nullptr);
+  std::string audio_npu_native_library_dir_str(
+      audio_npu_native_library_dir_chars);
+  env->ReleaseStringUTFChars(audio_npu_native_library_dir,
+                             audio_npu_native_library_dir_chars);
+  if (!audio_npu_native_library_dir_str.empty() &&
       audio_backend_optional.has_value()) {
     settings->GetMutableAudioExecutorSettings()->SetLitertDispatchLibDir(
-        audio_native_library_dir_str);
+        audio_npu_native_library_dir_str);
   }
 
   if (max_num_tokens > 0) {
@@ -529,7 +532,8 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
 
 LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateBenchmark)(
     JNIEnv* env, jclass thiz, jstring model_path, jstring backend,
-    jint prefill_tokens, jint decode_tokens, jstring cache_dir) {
+    jint prefill_tokens, jint decode_tokens, jstring cache_dir,
+    jstring main_npu_native_library_dir) {
   const char* model_path_chars = env->GetStringUTFChars(model_path, nullptr);
   std::string model_path_str(model_path_chars);
   env->ReleaseStringUTFChars(model_path, model_path_chars);
@@ -570,6 +574,17 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateBenchmark)(
   env->ReleaseStringUTFChars(cache_dir, cache_dir_chars);
   if (!cache_dir_str.empty()) {
     settings->GetMutableMainExecutorSettings().SetCacheDir(cache_dir_str);
+  }
+
+  const char* main_npu_native_library_dir_chars =
+      env->GetStringUTFChars(main_npu_native_library_dir, nullptr);
+  std::string main_npu_native_library_dir_str(
+      main_npu_native_library_dir_chars);
+  env->ReleaseStringUTFChars(main_npu_native_library_dir,
+                             main_npu_native_library_dir_chars);
+  if (!main_npu_native_library_dir_str.empty()) {
+    settings->GetMutableMainExecutorSettings().SetLitertDispatchLibDir(
+        main_npu_native_library_dir_str);
   }
 
   auto& benchmark_params = settings->GetMutableBenchmarkParams();

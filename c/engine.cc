@@ -28,6 +28,7 @@
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "absl/time/time.h"  // from @com_google_absl
 #include "nlohmann/json.hpp"  // from @nlohmann_json
 #include "runtime/conversation/conversation.h"
 #include "runtime/conversation/io_types.h"
@@ -356,6 +357,22 @@ void litert_lm_engine_settings_enable_benchmark(
   }
 }
 
+void litert_lm_engine_settings_set_num_prefill_tokens(
+    LiteRtLmEngineSettings* settings, int num_prefill_tokens) {
+  if (settings && settings->settings) {
+    settings->settings->GetMutableBenchmarkParams().set_num_prefill_tokens(
+        num_prefill_tokens);
+  }
+}
+
+void litert_lm_engine_settings_set_num_decode_tokens(
+    LiteRtLmEngineSettings* settings, int num_decode_tokens) {
+  if (settings && settings->settings) {
+    settings->settings->GetMutableBenchmarkParams().set_num_decode_tokens(
+        num_decode_tokens);
+  }
+}
+
 void litert_lm_engine_settings_set_activation_data_type(
     LiteRtLmEngineSettings* settings, int activation_data_type_int) {
   if (settings && settings->settings) {
@@ -660,6 +677,18 @@ double litert_lm_benchmark_info_get_time_to_first_token(
     return 0.0;
   }
   return benchmark_info->benchmark_info.GetTimeToFirstToken();
+}
+
+double litert_lm_benchmark_info_get_total_init_time_in_second(
+    const LiteRtLmBenchmarkInfo* benchmark_info) {
+  if (!benchmark_info) {
+    return 0.0;
+  }
+  double total_init_time_ms = 0.0;
+  for (const auto& phase : benchmark_info->benchmark_info.GetInitPhases()) {
+    total_init_time_ms += absl::ToDoubleMilliseconds(phase.second);
+  }
+  return total_init_time_ms / 1000.0;
 }
 
 int litert_lm_benchmark_info_get_num_prefill_turns(
