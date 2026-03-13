@@ -131,6 +131,7 @@ class Engine(val engineConfig: EngineConfig) : AutoCloseable {
           }
         }
 
+      println("MLOG: messagesJson: ${messagesJson.toString()}")
       @OptIn(ExperimentalApi::class) // opt-in experimental flags
       return Conversation(
         LiteRtLmJni.nativeCreateConversation(
