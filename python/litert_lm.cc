@@ -102,11 +102,8 @@ nlohmann::json HandleToolCalls(const nlohmann::json& response,
 
     tool_responses.push_back({
         {"type", "tool_response"},
-        {"tool_response",
-         {
-             {"name", name},
-             {"response", json_result},
-         }},
+        {"name", name},
+        {"response", json_result},
     });
   }
 
