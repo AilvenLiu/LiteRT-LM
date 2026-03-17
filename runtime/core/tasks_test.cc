@@ -172,7 +172,7 @@ TEST_F(TasksTest, PrefillSucceed) {
       Tasks::Prefill(*executor_, inputs,
                      /*wait_for_completion=*/true, benchmark_info);
 
-  EXPECT_OK(task_response);
+  ASSERT_OK(task_response);
   EXPECT_EQ(task_response->GetTaskState(), TaskState::kDone);
 }
 
@@ -200,7 +200,7 @@ TEST_F(TasksTest, DecodeSucceed) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
   // The response is " How's it going?" since "!" is the stop token which is
   // not included in the response.
@@ -264,7 +264,7 @@ TEST_F(TasksTest, DecodeReachMaxNumTokens) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kMaxNumTokensReached);
   // The response is truncated at the max number of tokens.
   EXPECT_EQ(task_responses->GetTexts().size(), 1);
@@ -306,7 +306,7 @@ TEST_F(TasksTest, DecodeWithMultipleOutputCandidates) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
   EXPECT_EQ(task_responses->GetTexts().size(), 3);
   EXPECT_EQ(task_responses->GetTexts()[0], " How's it going?");
@@ -368,7 +368,7 @@ TEST_F(TasksTest, DecodeWithConstrainedDecoding) {
       /*decoded_ids=*/std::nullopt, /*callback=*/callback,
       /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
   EXPECT_EQ(task_responses->GetTexts().size(), 1);
   EXPECT_EQ(task_responses->GetTexts()[0], " How's it");
@@ -551,7 +551,7 @@ TEST_F(TasksTest, DecodeBytePairEncodingTokens) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
   // The response is " How's it going?" since "!" is the stop token which is
   // not included in the response.
@@ -595,7 +595,7 @@ TEST_F(TasksTest, DecodeStopTokenIsPartialBytePairEncodingTokens) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
   // Empty response as the stop token is encoded as a partial byte pair encoding
   // token.
@@ -645,7 +645,7 @@ TEST_F(TasksTest, DecodeConsecutiveByteTokens) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
 
   // 432 -> buffered, output ""
   // 414 -> flushed "°"
@@ -696,7 +696,7 @@ TEST_F(TasksTest, DecodeConsecutiveByteTokensWithNonByteTokens) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
 
   // 345 -> "k"
   // 347 -> "m"
@@ -752,7 +752,7 @@ TEST_F(TasksTest, DecodeConsecutiveByteTokensWithPartialBpeIgnored) {
       /*constraint=*/nullptr, /*decoded_ids=*/std::nullopt,
       /*callback=*/callback, /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
 
   // 345 -> "k"
   // 347 -> "m"
@@ -794,7 +794,7 @@ class TasksCustomSamplingTest : public testing::Test {
                            batch_size);
   }
 
-  absl::StatusOr<Responses> ApplyScore(
+  absl::StatusOr<ScoringResponses> ApplyScore(
       const std::vector<std::vector<int>>& prefill_tokens,
       const std::vector<std::vector<int>>& decode_tokens, int vocab_size,
       int batch_size, const std::vector<absl::string_view>& target_texts,
@@ -848,7 +848,7 @@ TEST_F(TasksCustomSamplingTest, PrefillSucceed) {
   auto task_responses =
       Tasks::Prefill(executor, inputs,
                      /*wait_for_completion=*/true, benchmark_info);
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
 }
 
@@ -922,7 +922,7 @@ TEST_F(TasksCustomSamplingTest, DecodeCustomSampling) {
                     /*constraint=*/nullptr, std::move(decoded_ids.Value()),
                     /*callback=*/callback,
                     /*cancelled=*/nullptr);
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
   EXPECT_EQ(task_responses->GetTexts().size(), 2);
   // First candidate: " How's it going?!".
@@ -993,7 +993,7 @@ TEST_F(TasksCustomSamplingTest, DecodeCustomSamplingWithConstrainedDecoding) {
       constraint.get(), std::move(decoded_ids.Value()), /*callback=*/callback,
       /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
   EXPECT_EQ(task_responses->GetTexts().size(), 2);
   // First candidate: " How's it".
@@ -1066,18 +1066,22 @@ TEST_F(TasksCustomSamplingTest,
       /*store_token_lengths=*/false);
   ASSERT_OK(responses_without_token_lengths);
   // Expect a single output candidate.
-  EXPECT_EQ(responses_without_token_lengths->GetScores().size(), 1);
+  EXPECT_EQ(responses_without_token_lengths->GetScorerOutputs().size(), 1);
   // The fake executor returns the decode tokens deterministically.
   // This corresponds to the log probability of the target text "Hello World!"
   // being generated by the model. The log probability is 0.0f because the
   // decode tokens are the same as the target text.
-  EXPECT_EQ(responses_without_token_lengths->GetScores()[0], 0.0f);
-  EXPECT_FALSE(responses_without_token_lengths->GetTokenLengths().has_value());
-  ASSERT_TRUE(responses_without_token_lengths->GetTokenScores().has_value());
-  EXPECT_EQ(responses_without_token_lengths->GetTokenScores()->size(), 1);
-  EXPECT_EQ(responses_without_token_lengths->GetTokenScores()->at(0).size(), 7);
-  EXPECT_THAT(responses_without_token_lengths->GetTokenScores()->at(0),
-              testing::Each(0.0f));
+  EXPECT_EQ(responses_without_token_lengths->GetScorerOutputs()[0].score, 0.0f);
+  EXPECT_FALSE(responses_without_token_lengths->GetScorerOutputs()[0]
+                   .option_text_token_length.has_value());
+  ASSERT_TRUE(responses_without_token_lengths->GetScorerOutputs()[0]
+                  .token_scores.has_value());
+  EXPECT_EQ(responses_without_token_lengths->GetScorerOutputs()[0]
+                .token_scores->size(),
+            7);
+  EXPECT_THAT(
+      *responses_without_token_lengths->GetScorerOutputs()[0].token_scores,
+      testing::Each(0.0f));
 }
 
 TEST_F(TasksCustomSamplingTest,
@@ -1090,19 +1094,23 @@ TEST_F(TasksCustomSamplingTest,
       /*store_token_lengths=*/true);
   ASSERT_OK(responses_with_token_lengths);
   // Expect a single output candidate.
-  EXPECT_EQ(responses_with_token_lengths->GetScores().size(), 1);
+  EXPECT_EQ(responses_with_token_lengths->GetScorerOutputs().size(), 1);
   // The fake executor returns the decode tokens deterministically.
   // This corresponds to the log probability of the target text "Hello World!"
   // being generated by the model. The log probability is 0.0f because the
   // decode tokens are the same as the target text.
-  EXPECT_EQ(responses_with_token_lengths->GetScores()[0], 0.0f);
-  EXPECT_TRUE(responses_with_token_lengths->GetTokenLengths().has_value());
-  EXPECT_EQ(responses_with_token_lengths->GetTokenLengths()->size(), 1);
-  EXPECT_EQ((*responses_with_token_lengths->GetTokenLengths())[0], 7);
-  ASSERT_TRUE(responses_with_token_lengths->GetTokenScores().has_value());
-  EXPECT_EQ(responses_with_token_lengths->GetTokenScores()->size(), 1);
-  EXPECT_EQ(responses_with_token_lengths->GetTokenScores()->at(0).size(), 7);
-  EXPECT_THAT(responses_with_token_lengths->GetTokenScores()->at(0),
+  EXPECT_EQ(responses_with_token_lengths->GetScorerOutputs()[0].score, 0.0f);
+  EXPECT_TRUE(responses_with_token_lengths->GetScorerOutputs()[0]
+                  .option_text_token_length.has_value());
+  EXPECT_EQ(*responses_with_token_lengths->GetScorerOutputs()[0]
+                 .option_text_token_length,
+            7);
+  ASSERT_TRUE(responses_with_token_lengths->GetScorerOutputs()[0]
+                  .token_scores.has_value());
+  EXPECT_EQ(
+      responses_with_token_lengths->GetScorerOutputs()[0].token_scores->size(),
+      7);
+  EXPECT_THAT(*responses_with_token_lengths->GetScorerOutputs()[0].token_scores,
               testing::Each(0.0f));
 }
 
@@ -1126,28 +1134,35 @@ TEST_F(TasksCustomSamplingTest,
   ASSERT_OK(task_responses_without_token_lengths);
   EXPECT_EQ(task_responses_without_token_lengths->GetTaskState(),
             TaskState::kDone);
-  // Expect a single output candidate.
-  EXPECT_EQ(task_responses_without_token_lengths->GetScores().size(), 2);
+  // Expect two output candidates.
+  EXPECT_EQ(task_responses_without_token_lengths->GetScorerOutputs().size(), 2);
   // The fake executor returns the decode tokens deterministically.
   // These correspond to the log probabilities of the target texts
   // "How's it going?" and "Hello World!" being generated by the model. The
   // log probabilities are 0.0f because the decode tokens are the same as the
   // target texts.
-  EXPECT_EQ(task_responses_without_token_lengths->GetScores()[0], 0.0f);
-  EXPECT_EQ(task_responses_without_token_lengths->GetScores()[1], 0.0f);
-  EXPECT_FALSE(
-      task_responses_without_token_lengths->GetTokenLengths().has_value());
-  ASSERT_TRUE(
-      task_responses_without_token_lengths->GetTokenScores().has_value());
-  EXPECT_EQ(task_responses_without_token_lengths->GetTokenScores()->size(), 2);
-  EXPECT_EQ(
-      task_responses_without_token_lengths->GetTokenScores()->at(0).size(), 7);
-  EXPECT_THAT(task_responses_without_token_lengths->GetTokenScores()->at(0),
-              testing::Each(0.0f));
-  EXPECT_EQ(
-      task_responses_without_token_lengths->GetTokenScores()->at(1).size(), 7);
-  EXPECT_THAT(task_responses_without_token_lengths->GetTokenScores()->at(1),
-              testing::Each(0.0f));
+  EXPECT_EQ(task_responses_without_token_lengths->GetScorerOutputs()[0].score,
+            0.0f);
+  EXPECT_EQ(task_responses_without_token_lengths->GetScorerOutputs()[1].score,
+            0.0f);
+  EXPECT_FALSE(task_responses_without_token_lengths->GetScorerOutputs()[0]
+                   .option_text_token_length.has_value());
+  EXPECT_FALSE(task_responses_without_token_lengths->GetScorerOutputs()[1]
+                   .option_text_token_length.has_value());
+  ASSERT_TRUE(task_responses_without_token_lengths->GetScorerOutputs()[0]
+                  .token_scores.has_value());
+  EXPECT_EQ(task_responses_without_token_lengths->GetScorerOutputs()[0]
+                .token_scores->size(),
+            7);
+  EXPECT_THAT(
+      *task_responses_without_token_lengths->GetScorerOutputs()[0].token_scores,
+      testing::Each(0.0f));
+  EXPECT_EQ(task_responses_without_token_lengths->GetScorerOutputs()[1]
+                .token_scores->size(),
+            7);
+  EXPECT_THAT(
+      *task_responses_without_token_lengths->GetScorerOutputs()[1].token_scores,
+      testing::Each(0.0f));
 }
 
 TEST_F(TasksCustomSamplingTest, ScoreCustomSamplingMultiBatchWithTokenLengths) {
@@ -1169,29 +1184,39 @@ TEST_F(TasksCustomSamplingTest, ScoreCustomSamplingMultiBatchWithTokenLengths) {
   ASSERT_OK(task_responses_with_token_lengths);
   EXPECT_EQ(task_responses_with_token_lengths->GetTaskState(),
             TaskState::kDone);
-  // Expect a single output candidate.
-  EXPECT_EQ(task_responses_with_token_lengths->GetScores().size(), 2);
+  // Expect two output candidates.
+  EXPECT_EQ(task_responses_with_token_lengths->GetScorerOutputs().size(), 2);
   // The fake executor returns the decode tokens deterministically.
   // These correspond to the log probabilities of the target texts
   // "How's it going?" and "Hello World!" being generated by the model. The
   // log probabilities are 0.0f because the decode tokens are the same as the
   // target texts.
-  EXPECT_EQ(task_responses_with_token_lengths->GetScores()[0], 0.0f);
-  EXPECT_EQ(task_responses_with_token_lengths->GetScores()[1], 0.0f);
-  EXPECT_TRUE(task_responses_with_token_lengths->GetTokenLengths().has_value());
-  EXPECT_EQ(task_responses_with_token_lengths->GetTokenLengths()->size(), 2);
-  EXPECT_EQ((*task_responses_with_token_lengths->GetTokenLengths())[0], 7);
-  EXPECT_EQ((*task_responses_with_token_lengths->GetTokenLengths())[1], 7);
-  ASSERT_TRUE(task_responses_with_token_lengths->GetTokenScores().has_value());
-  EXPECT_EQ(task_responses_with_token_lengths->GetTokenScores()->size(), 2);
-  EXPECT_EQ(task_responses_with_token_lengths->GetTokenScores()->at(0).size(),
+  EXPECT_EQ(task_responses_with_token_lengths->GetScorerOutputs()[0].score,
+            0.0f);
+  EXPECT_EQ(task_responses_with_token_lengths->GetScorerOutputs()[1].score,
+            0.0f);
+  EXPECT_TRUE(task_responses_with_token_lengths->GetScorerOutputs()[0]
+                  .option_text_token_length.has_value());
+  EXPECT_EQ(*task_responses_with_token_lengths->GetScorerOutputs()[0]
+                 .option_text_token_length,
             7);
-  EXPECT_THAT(task_responses_with_token_lengths->GetTokenScores()->at(0),
-              testing::Each(0.0f));
-  EXPECT_EQ(task_responses_with_token_lengths->GetTokenScores()->at(1).size(),
+  EXPECT_EQ(*task_responses_with_token_lengths->GetScorerOutputs()[1]
+                 .option_text_token_length,
             7);
-  EXPECT_THAT(task_responses_with_token_lengths->GetTokenScores()->at(1),
-              testing::Each(0.0f));
+  ASSERT_TRUE(task_responses_with_token_lengths->GetScorerOutputs()[0]
+                  .token_scores.has_value());
+  EXPECT_EQ(task_responses_with_token_lengths->GetScorerOutputs()[0]
+                .token_scores->size(),
+            7);
+  EXPECT_THAT(
+      *task_responses_with_token_lengths->GetScorerOutputs()[0].token_scores,
+      testing::Each(0.0f));
+  EXPECT_EQ(task_responses_with_token_lengths->GetScorerOutputs()[1]
+                .token_scores->size(),
+            7);
+  EXPECT_THAT(
+      *task_responses_with_token_lengths->GetScorerOutputs()[1].token_scores,
+      testing::Each(0.0f));
 }
 
 TEST_F(TasksCustomSamplingTest, DecodeCustomSamplingReachMaxNumTokens) {
@@ -1238,7 +1263,7 @@ TEST_F(TasksCustomSamplingTest, DecodeCustomSamplingReachMaxNumTokens) {
                     /*constraint=*/nullptr, std::move(decoded_ids.Value()),
                     /*callback=*/callback,
                     /*cancelled=*/nullptr);
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kMaxNumTokensReached);
   EXPECT_EQ(task_responses->GetTexts().size(), 2);
   // First candidate truncated at max number of tokens: " How's".
@@ -1304,7 +1329,7 @@ TEST_F(TasksCustomSamplingTest, DecodeCustomSamplingStreaming) {
                     /*callback=*/callback,
                     /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
 
   callback(task_responses);
@@ -1368,7 +1393,7 @@ TEST_F(TasksCustomSamplingTest,
                     /*cancelled=*/nullptr);
   callback(task_responses);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kMaxNumTokensReached);
 
   // First candidate truncated at max number of tokens: " How's".
@@ -1432,7 +1457,7 @@ TEST_F(TasksCustomSamplingTest, DecodeComplexStopTokenDetector) {
                     /*callback=*/callback,
                     /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   // Expect two output candidates.
   EXPECT_EQ(task_responses->GetTexts().size(), 2);
   // First candidate: " How's it going?!".
@@ -1584,7 +1609,7 @@ TEST_F(TasksCustomSamplingTest,
       /*cancelled=*/nullptr);
   callback(task_responses);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
 
   EXPECT_EQ(responses[0], " Hello World");
@@ -1666,7 +1691,7 @@ TEST_F(TasksCustomSamplingTest, DecodeStopTokenAndBPEDetector) {
                     /*callback=*/callback,
                     /*cancelled=*/nullptr);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTexts().size(), 2);
   EXPECT_EQ(task_responses->GetTexts()[0], "BPE");
   EXPECT_EQ(task_responses->GetTexts()[1], "a");
@@ -1704,7 +1729,7 @@ TEST_F(TasksCallbackTest, DecodeStreaming_SuccessfulCompletion) {
       /*cancelled=*/nullptr);
   callback(task_responses);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
 
   EXPECT_EQ(responses[0], " How's it going?");
@@ -1744,7 +1769,7 @@ TEST_F(TasksCallbackTest, DecodeStreaming_ErrorCompletion) {
       /*cancelled=*/nullptr);
   callback(task_responses);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kMaxNumTokensReached);
 
   EXPECT_EQ(responses[0], " How's");
@@ -1792,7 +1817,7 @@ TEST_F(TasksCallbackTest,
       /*cancelled=*/nullptr);
   callback(task_responses);
 
-  EXPECT_OK(task_responses);
+  ASSERT_OK(task_responses);
   EXPECT_EQ(task_responses->GetTaskState(), TaskState::kDone);
 
   EXPECT_EQ(responses[0], " How's it going?");
