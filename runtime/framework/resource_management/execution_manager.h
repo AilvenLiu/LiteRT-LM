@@ -42,6 +42,7 @@
 #include "runtime/engine/engine.h"
 #include "runtime/engine/engine_settings.h"
 #include "runtime/engine/io_types.h"
+#include "runtime/executor/audio_executor.h"
 #include "runtime/executor/audio_executor_settings.h"
 #include "runtime/executor/llm_executor.h"
 #include "runtime/executor/llm_executor_io_types.h"
@@ -120,8 +121,9 @@ class ExecutionManager {
       std::unique_ptr<VisionExecutorSettings> absl_nullable
       vision_executor_settings,
       std::unique_ptr<AudioExecutorSettings> absl_nullable
-      audio_executor_settings,
-      ::litert::Environment* absl_nullable litert_env);
+          audio_executor_settings,
+      ::litert::Environment* absl_nullable litert_env,
+      std::unique_ptr<AudioExecutor> absl_nullable audio_executor = nullptr);
 
   ~ExecutionManager() {
     WaitUntilAllDone(Engine::kDefaultTimeout).IgnoreError();

@@ -756,6 +756,14 @@ ResourceManager::AcquireVisionExecutor() {
 }
 
 absl::Status ResourceManager::TryLoadingAudioExecutor() {
+  bool is_llm_gpu_artisan = false;
+  if (audio_executor_settings_ && audio_executor_settings_->GetBackend() ==
+                                      litert::lm::Backend::GPU_ARTISAN) {
+    RET_CHECK(llm_executor_settings_.has_value());
+    is_llm_gpu_artisan =
+        (llm_executor_settings_->GetBackend() == Backend::GPU_ARTISAN);
+  }
+
   absl::MutexLock lock(audio_executor_mutex_);
   if (audio_executor_ != nullptr) {
     return absl::OkStatus();
@@ -793,17 +801,20 @@ absl::StatusOr<std::unique_ptr<ResourceManager>> ResourceManager::Create(
     ModelResources* absl_nullable model_resources,
     std::unique_ptr<LlmExecutor> absl_nonnull llm_executor,
     std::unique_ptr<VisionExecutorSettings> absl_nullable
-    vision_executor_settings,
+        vision_executor_settings,
     std::unique_ptr<litert::lm::AudioExecutorSettings> absl_nullable
-    audio_executor_settings,
-    ::litert::Environment* absl_nullable litert_env) {
+        audio_executor_settings,
+    ::litert::Environment* absl_nullable litert_env,
+    std::unique_ptr<AudioExecutor> absl_nullable audio_executor) {
   if (llm_executor == nullptr) {
     return absl::InvalidArgumentError("Llm executor is null.");
   }
+  ASSIGN_OR_RETURN(LlmExecutorSettings llm_executor_settings,
+                   llm_executor->GetExecutorSettings());
   auto llm_resource_manager = std::make_unique<ResourceManager>(
       model_resources, std::move(llm_executor),
       std::move(vision_executor_settings), std::move(audio_executor_settings),
-      litert_env);
+      std::move(llm_executor_settings), litert_env, std::move(audio_executor));
   return llm_resource_manager;
 }
 

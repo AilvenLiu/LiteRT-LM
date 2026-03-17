@@ -49,6 +49,7 @@
 #include "runtime/core/tasks.h"
 #include "runtime/engine/engine_settings.h"
 #include "runtime/engine/io_types.h"
+#include "runtime/executor/audio_executor.h"
 #include "runtime/executor/audio_executor_settings.h"
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/llm_executor.h"
@@ -627,16 +628,19 @@ absl::StatusOr<std::unique_ptr<ExecutionManager>> ExecutionManager::Create(
     ModelResources* absl_nullable model_resources,
     std::unique_ptr<LlmExecutor> absl_nonnull llm_executor,
     std::unique_ptr<VisionExecutorSettings> absl_nullable
-    vision_executor_settings,
+        vision_executor_settings,
     std::unique_ptr<AudioExecutorSettings> absl_nullable
-    audio_executor_settings,
-    ::litert::Environment* absl_nullable litert_env) {
+        audio_executor_settings,
+    ::litert::Environment* absl_nullable litert_env,
+    std::unique_ptr<AudioExecutor> absl_nullable audio_executor) {
   std::unique_ptr<Sampler> sampler;
   ASSIGN_OR_RETURN(
       auto resource_manager,
-      ResourceManager::Create(model_resources, std::move(llm_executor),
-                              std::move(vision_executor_settings),
-                              std::move(audio_executor_settings), litert_env));
+      ResourceManager::Create(
+          model_resources, std::move(llm_executor),
+          std::move(vision_executor_settings),
+          std::move(audio_executor_settings), litert_env,
+          std::move(audio_executor)));
   return absl::WrapUnique(
       new ExecutionManager(tokenizer, std::move(resource_manager), litert_env));
 }
