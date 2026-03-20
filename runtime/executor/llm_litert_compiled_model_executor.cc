@@ -1498,7 +1498,18 @@ absl::Status LlmLiteRtCompiledModelExecutorStatic::Prefill(
           prefill_signature, prefill_length, prefill_length,
           prefill_input_buffers_[prefill_signature]));
     }
-    bool async = i < work_groups.size() - 1 || !params.GetWaitForCompletion();
+    // TODO(b/494284915): Switch to use async prefill for Metal backend.
+    if (!do_prefill_sync_.has_value()) {
+      do_prefill_sync_ =
+          std::any_of(prefill_input_buffers_[prefill_signature].begin(),
+                      prefill_input_buffers_[prefill_signature].end(),
+                      [](const auto& pair) {
+                        return pair.second.IsMetalMemory();
+                      });
+    }
+    bool async =
+        !*do_prefill_sync_ &&
+        (i < work_groups.size() - 1 || !params.GetWaitForCompletion());
     RETURN_IF_ERROR(PrefillInternal(
         prefill_signature, prefill_input_buffers_[prefill_signature],
         ids.subspan(/*pos=*/0, prefill_length), async));

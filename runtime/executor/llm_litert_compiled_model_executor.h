@@ -387,6 +387,7 @@ class LlmLiteRtCompiledModelExecutorStatic
       std::string /*prefill_signature_name*/,
       absl::flat_hash_map<absl::string_view /*input_name*/, TensorBuffer>>
       prefill_input_buffers_;
+  std::optional<bool> do_prefill_sync_;
 };
 
 // The dynamic executor for the prefill-decode compiled model.

@@ -377,6 +377,10 @@ absl::Status TopKMetalSampler::SampleToIdAndScoreBuffer(const TensorBuffer& logi
                                                         TensorBuffer* scores_tensor) {
   RET_CHECK_EQ(scores_tensor, nullptr) << "This backend does not support scoring for now.";
 
+  if (logits_tensor.IsMetalMemory() && logits_tensor.HasEvent()) {
+    LITERT_ASSIGN_OR_RETURN(auto event, logits_tensor.GetEvent());
+    LITERT_RETURN_IF_ERROR(event.Wait(/*timeout_in_ms=*/-1));
+  }
   // Use persistent command queue
   id<MTLCommandBuffer> command_buffer = [command_queue_ commandBuffer];
 
