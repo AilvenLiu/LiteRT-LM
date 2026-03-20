@@ -46,6 +46,7 @@
 #include "runtime/executor/vision_executor_utils.h"
 #include "runtime/util/scoped_file.h"
 #if !defined(LITERT_DISABLE_NPU)
+#include "litert/cc/options/litert_google_tensor_options.h"  // from @litert
 #include "litert/cc/options/litert_qualcomm_options.h"  // from @litert
 #endif  // !defined(LITERT_DISABLE_NPU)
 #include "litert/cc/litert_compiled_model.h"  // from @litert
@@ -256,6 +257,10 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionEncoder::Initialize() {
       qualcomm_options.SetLogLevel(qualcomm::QualcommOptions::LogLevel::kOff);
       qualcomm_options.SetHtpPerformanceMode(
           qualcomm::QualcommOptions::HtpPerformanceMode::kBurst);
+      LITERT_ASSIGN_OR_RETURN(auto& google_tensor_options,
+                              options.GetGoogleTensorOptions());
+      google_tensor_options.SetPerformanceMode(
+          google_tensor::GoogleTensorOptions::PerformanceMode::kBurst);
       // TODO: yunandrew - Add support for other NPU backends.
       options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);
       break;

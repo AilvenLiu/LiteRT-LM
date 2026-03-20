@@ -55,6 +55,7 @@
 #include "litert/cc/litert_ranked_tensor_type.h"  // from @litert
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
 #if defined(__ANDROID__)
+#include "litert/cc/options/litert_google_tensor_options.h"  // from @litert
 #include "litert/cc/options/litert_qualcomm_options.h"  // from @litert
 #endif
 
@@ -496,6 +497,10 @@ LlmLiteRtNpuCompiledModelExecutor::CreateLiteRtNpuOptions(
   qnn_opts.SetLogLevel(::litert::qualcomm::QualcommOptions::LogLevel::kOff);
   qnn_opts.SetHtpPerformanceMode(
       ::litert::qualcomm::QualcommOptions::HtpPerformanceMode::kBurst);
+  LITERT_ASSIGN_OR_RETURN(auto& google_tensor_opts,
+                          options.GetGoogleTensorOptions());
+  google_tensor_opts.SetPerformanceMode(
+      ::litert::google_tensor::GoogleTensorOptions::PerformanceMode::kBurst);
 #endif
   return options;
 }
