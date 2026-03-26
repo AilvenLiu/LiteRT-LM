@@ -3,10 +3,8 @@ name: "Nightly-Mac-Arm64"
 on:
   workflow_dispatch:
   schedule:
-    # Runs at 9:00 UTC. It is
-    # - 1:00 AM Pacific Standard Time, UTC-8, or
-    # - 2:00 AM Pacific Daylight Time, UTC-7.
-    - cron: "0 9 * * *"
+    - cron: '0 21 * * *'
+      timezone: 'America/Los_Angeles'
 
 jobs:
   build-mac-wheel:
