@@ -45,6 +45,11 @@ cc_binary(
         "//conditions:default": [
             "-Wl,-Bsymbolic",
             "-Wl,-rpath,'$$ORIGIN'",
+            # Marks the binary stack as non-executable. Required for
+            # compatibility with modern Linux kernels (NX/SELlinux) and to
+            # ensure the extension can be imported in restricted environments,
+            # like pip install (b/496655352).
+            "-Wl,-z,noexecstack",
         ],
     }),
     linkshared = True,
