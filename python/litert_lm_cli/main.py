@@ -275,7 +275,7 @@ def benchmark(
   model_obj.benchmark(
       prefill_tokens=prefill_tokens,
       decode_tokens=decode_tokens,
-      is_android=False,
+      is_android=android,
       backend=backend,
   )
 
@@ -329,6 +329,7 @@ def benchmark(
 def run(
     model_reference,
     prompt=None,
+    android=False,
     backend="cpu",
     preset=None,
     verbose=False,
