@@ -17,6 +17,8 @@
 
 #include <vector>
 
+#include "absl/status/statusor.h"  // from @com_google_absl
+#include "litert/cc/litert_environment.h"  // from @litert
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
 
 namespace litert::lm {
@@ -27,6 +29,10 @@ int NumSignificantDims(const litert::TensorBuffer& tensor_buffer);
 
 // Returns the dimensions of the given tensor buffer as a vector.
 std::vector<int> TensorBufferDims(const litert::TensorBuffer& tensor_buffer);
+
+// Creates a deep copy of the given tensor buffer.
+absl::StatusOr<litert::TensorBuffer> CopyTensorBuffer(
+    litert::Environment& env, const litert::TensorBuffer& tensor_buffer);
 
 }  // namespace litert::lm
 
