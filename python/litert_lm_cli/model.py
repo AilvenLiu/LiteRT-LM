@@ -21,10 +21,12 @@ import inspect
 import json
 import os
 import pathlib
-import readline  # pylint: disable=unused-import
 import traceback
 
 import click
+import prompt_toolkit
+from prompt_toolkit import key_binding
+
 import litert_lm
 
 try:
@@ -39,7 +41,7 @@ except ImportError:
 
 def load_preset(preset: str):
   """Loads a preset file and returns the tools, messages and extra_context."""
-  click.echo(click.style(f"Loading preset from {preset}:", fg="cyan"))
+  click.echo(click.style(f"Loading preset from {preset}:", dim=True))
   if not os.path.exists(preset):
     click.echo(click.style(f"Preset file not found: {preset}", fg="red"))
     return None, None, None
@@ -64,22 +66,22 @@ def load_preset(preset: str):
   system_instruction = getattr(user_tools, "system_instruction", None)
   if system_instruction:
     click.echo(
-        click.style(f"- System instruction: {system_instruction}", fg="cyan")
+        click.style(f"- System instruction: {system_instruction}", dim=True)
     )
     messages = [{
         "role": "system",
         "content": [{"type": "text", "text": system_instruction}],
     }]
 
-  click.echo(click.style("- Tools:", fg="cyan"))
+  click.echo(click.style("- Tools:", dim=True))
   for tool in tools:
     click.echo(
-        click.style(f"  - {getattr(tool, '__name__', str(tool))}", fg="cyan")
+        click.style(f"  - {getattr(tool, '__name__', str(tool))}", dim=True)
     )
 
   extra_context = getattr(user_tools, "extra_context", None)
   if extra_context:
-    click.echo(click.style(f"- Extra context: {extra_context}", fg="cyan"))
+    click.echo(click.style(f"- Extra context: {extra_context}", dim=True))
 
   return tools, messages, extra_context
 
@@ -169,20 +171,8 @@ class Model:
       )
       return
 
-    if not prompt:
-      click.echo(click.style(f"Loading model {self.to_str()}...", fg="cyan"))
     try:
       backend_val = _parse_backend(backend)
-
-      tools = None
-      messages = None
-      extra_context = None
-      if preset:
-        tools, messages, extra_context = load_preset(preset)
-        if tools is None and messages is None and extra_context is None:
-          return
-
-      handler = LoggingToolEventHandler(self) if tools else None
 
       if is_android:
         if not _HAS_ADB:
@@ -195,48 +185,70 @@ class Model:
             enable_speculative_decoding=enable_speculative_decoding,
         )
 
-      with (
-          engine_cm as engine,
-          engine.create_conversation(
-              tools=tools,
-              messages=messages,
-              tool_event_handler=handler,
-              extra_context=extra_context,
-          ) as conversation,
-      ):
-        if prompt:
-          self._execute_prompt(conversation, prompt)
-          return
+      with engine_cm as engine:
+        tools = None
+        messages = None
+        extra_context = None
+        if preset:
+          tools, messages, extra_context = load_preset(preset)
+          if tools is None and messages is None and extra_context is None:
+            return
 
-        click.echo(
-            click.style(
-                "Model loaded. Type your prompts and press Enter. Type 'exit'"
-                " to quit.",
-                fg="cyan",
-            )
-        )
+        handler = LoggingToolEventHandler(self) if tools else None
 
-        while True:
-          try:
-            user_prompt = input("> ")
-            if user_prompt.lower() == "exit":
+        with engine.create_conversation(
+            messages=messages,
+            tools=tools,
+            tool_event_handler=handler,
+            extra_context=extra_context,
+        ) as conversation:
+          if prompt:
+            self._execute_prompt(conversation, prompt)
+            return
+
+          click.echo(
+              click.style(
+                  "[enter] submit | [ctrl+j] newline | [ctrl+c] clear/exit",
+                  fg="cyan",
+              )
+          )
+          click.echo()
+
+          history_path = os.path.join(
+              os.path.expanduser("~"), ".litert-lm", "history"
+          )
+          os.makedirs(os.path.dirname(history_path), exist_ok=True)
+
+          prompt_session = prompt_toolkit.PromptSession(
+              history=prompt_toolkit.history.FileHistory(history_path),
+              key_bindings=self._create_keybindings(),
+          )
+
+          while True:
+            try:
+              user_prompt = prompt_session.prompt(
+                  prompt_toolkit.ANSI(click.style("> ", fg="green", bold=True)),
+                  multiline=True,
+                  # Start the new line in the beginning of line. This makes
+                  # copying respecting the text.
+                  prompt_continuation=lambda width, line_number, is_soft_wrap: (
+                      ""
+                  ),
+              )
+              if not user_prompt:
+                continue
+
+              self._execute_prompt(conversation, user_prompt)
+
+            except EOFError:
               break
-            if not user_prompt:
+            except KeyboardInterrupt:
+              # Catch Ctrl+C at the input prompt
+              click.echo()
               continue
-
-            self._execute_prompt(conversation, user_prompt)
-
-          except EOFError:
-            break
-          except KeyboardInterrupt:
-            # Catch Ctrl+C at the input prompt
-            click.echo()
-            continue
-          except Exception:  # pylint: disable=broad-exception-caught
-            click.echo(click.style("Error during inference", fg="red"))
-            traceback.print_exc()
-
-        click.echo("Model closed.")
+            except Exception:  # pylint: disable=broad-exception-caught
+              click.echo(click.style("Error during inference", fg="red"))
+              traceback.print_exc()
 
     except Exception:  # pylint: disable=broad-exception-caught
       click.echo(click.style("An error occurred", fg="red"))
@@ -255,7 +267,7 @@ class Model:
             if self.active_channel is not None:
               click.echo()
               self.active_channel = None
-            click.echo(item.get("text", ""), nl=False)
+            click.echo(click.style(item.get("text", ""), fg="yellow"), nl=False)
 
         # Handle channels
         channels = chunk.get("channels", {})
@@ -265,7 +277,7 @@ class Model:
               click.echo()
             click.echo(click.style(f"[{channel_name}] ", fg="blue"), nl=False)
             self.active_channel = channel_name
-          click.echo(channel_content, nl=False)
+          click.echo(click.style(channel_content, fg="yellow"), nl=False)
       if self.active_channel is not None:
         click.echo()
       else:
@@ -276,7 +288,36 @@ class Model:
       # This ensures we don't throw away StopIteration.
       for _ in stream:
         pass
-      click.echo(click.style("\n[Generation cancelled]", fg="yellow"))
+      click.echo(click.style("\n[Generation cancelled]", dim=True))
+
+  def _create_keybindings(self) -> key_binding.KeyBindings:
+    """Creates keybindings for the interactive prompt."""
+    kb = key_binding.KeyBindings()
+
+    # Key binding for sending the prompt.
+    @kb.add("enter")
+    def _handle_enter(event):
+      buffer = event.current_buffer
+      if buffer.text.strip():
+        buffer.validate_and_handle()
+
+    # Key binding for new line. Note that terminal cannot take
+    # "shift+enter", and "ctrl+enter"
+    @kb.add("c-j")  # standard terminal convention.
+    @kb.add("escape", "enter")  # alt+enter and esc+enter
+    def _handle_newline(event):
+      event.current_buffer.insert_text("\n")
+
+    # Key binding for clearing input or exiting.
+    @kb.add("c-c")
+    def _handle_clear_or_exit(event):
+      buffer = event.current_buffer
+      if buffer.text:
+        buffer.text = ""
+      else:
+        event.app.exit(exception=EOFError)
+
+    return kb
 
   def benchmark(
       self,

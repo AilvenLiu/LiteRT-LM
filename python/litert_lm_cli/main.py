@@ -31,7 +31,11 @@ from litert_lm_cli import version
 @click.group(
     cls=help_formatter.ColorGroup,
     name="litert-lm",
-    context_settings=dict(show_default=True, max_content_width=120),
+    context_settings=dict(
+        show_default=True,
+        max_content_width=120,
+        help_option_names=["-h", "--help"],
+    ),
 )
 @click.version_option(version=version.VERSION)
 def cli():
