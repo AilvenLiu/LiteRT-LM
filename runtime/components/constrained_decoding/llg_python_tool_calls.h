@@ -12,27 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/components/constrained_decoding/llguidance_schema_utils.h"
+#ifndef THIRD_PARTY_ODML_LITERT_LM_RUNTIME_COMPONENTS_CONSTRAINED_DECODING_LLG_PYTHON_TOOL_CALLS_H_
+#define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_COMPONENTS_CONSTRAINED_DECODING_LLG_PYTHON_TOOL_CALLS_H_
 
 #include <string>
 
-#include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "nlohmann/json.hpp"  // from @nlohmann_json
-#include "runtime/components/constrained_decoding/llg_fc_tool_calls.h"
-#include "runtime/components/constrained_decoding/llg_python_tool_calls.h"
+#include "runtime/components/constrained_decoding/llguidance_schema_utils.h"
 
 namespace litert::lm {
 
-absl::StatusOr<std::string> CreateLarkGrammarForTools(
-    const nlohmann::ordered_json& tools, const LlgConstraintsOptions& options) {
-  switch (options.funcall_format) {
-    case FuncallFormat::kFc:
-      return CreateLarkGrammarForFcToolCalls(tools, options);
-    case FuncallFormat::kPython:
-      return CreateLarkGrammarForPythonToolCalls(tools, options);
-  }
-  return absl::InvalidArgumentError("Unknown function call format.");
-}
+absl::StatusOr<std::string> CreateLarkGrammarForPythonToolCalls(
+    const nlohmann::ordered_json& tools, const LlgConstraintsOptions& options);
 
 }  // namespace litert::lm
+
+#endif  // THIRD_PARTY_ODML_LITERT_LM_RUNTIME_COMPONENTS_CONSTRAINED_DECODING_LLG_PYTHON_TOOL_CALLS_H_
