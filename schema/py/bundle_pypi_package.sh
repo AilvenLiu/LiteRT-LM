@@ -22,13 +22,13 @@
 # 5. Verifies the built wheel by installing it and running help commands.
 
 # Ensure script stops on error
-set -e
+set -ex
 
-WORKSPACE_ROOT=$(bazel info workspace)
+WORKSPACE_ROOT=$(pwd)
 echo "Workspace Root: ${WORKSPACE_ROOT}"
 STAGING_DIR="/tmp/litertlm_builder"
 
-# Build Proto and FlatBuffer bindings
+echo "Building Proto and FlatBuffer bindings..."
 bazel build //runtime/proto:all
 bazel build //schema/core:litertlm_header_schema_py
 
