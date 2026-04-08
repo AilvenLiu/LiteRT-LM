@@ -134,9 +134,8 @@ struct LitertLmMetrics {
 };
 
 // Builds the content list from the input data.
-absl::Status BuildContentList(const std::vector<InputData>& input_data,
-                              const LiteRtLmSettings& settings,
-                              nlohmann::json& content_list);
+absl::StatusOr<nlohmann::json> BuildContentList(
+    const std::vector<InputData>& input_data, const LiteRtLmSettings& settings);
 
 // Creates the EngineSettings from the LiteRtLmSettings.
 absl::StatusOr<EngineSettings> CreateEngineSettings(
