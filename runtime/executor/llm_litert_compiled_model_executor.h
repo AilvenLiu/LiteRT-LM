@@ -267,6 +267,17 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
   absl::Status ConsumePendingOrAddProcessedToken(
       const std::vector<std::shared_ptr<TokenData>>& token);
 
+  // Gets the prefill signature key from the compiled model.
+  absl::StatusOr<std::string> GetPrefillSignatureKey() const;
+
+  // Clones the KV cache buffers from the compiled model.
+  absl::StatusOr<absl::flat_hash_map<absl::string_view, TensorBuffer>>
+  CloneKVCacheBuffers() const;
+
+  absl::Status RestoreKVCacheBuffers(
+      const absl::flat_hash_map<absl::string_view, TensorBuffer>&
+          kv_cache_buffers);
+
   LlmExecutorSettings executor_settings_;
   Environment& env_;
   const Model& model_;
