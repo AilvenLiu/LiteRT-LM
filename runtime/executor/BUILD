@@ -531,6 +531,52 @@ cc_library(
 )
 
 cc_library(
+    name = "llm_litert_npu_compiled_model_executor_utils",
+    srcs = ["llm_litert_npu_compiled_model_executor_utils.cc"],
+    hdrs = ["llm_litert_npu_compiled_model_executor_utils.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ] + select({
+        "@litert//litert:litert_link_capi_so": [
+            "@litert//litert/cc:litert_api_with_dynamic_runtime",
+        ],
+        "//conditions:default": [
+            "@litert//litert/cc:litert_element_type",
+            "@litert//litert/cc:litert_macros",
+            "@litert//litert/cc:litert_ranked_tensor_type",
+            "@litert//litert/cc:litert_tensor_buffer",
+        ],
+    }),
+)
+
+cc_test(
+    name = "llm_litert_npu_compiled_model_executor_utils_test",
+    srcs = ["llm_litert_npu_compiled_model_executor_utils_test.cc"],
+    deps = [
+        ":llm_litert_npu_compiled_model_executor_utils",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:string_view",
+    ] + select({
+        "@litert//litert:litert_link_capi_so": [
+            "@litert//litert/cc:litert_api_with_dynamic_runtime",
+        ],
+        "//conditions:default": [
+            "@litert//litert/cc:litert_element_type",
+            "@litert//litert/cc:litert_environment",
+            "@litert//litert/cc:litert_layout",
+            "@litert//litert/cc:litert_ranked_tensor_type",
+            "@litert//litert/cc:litert_tensor_buffer",
+            "@litert//litert/cc:litert_tensor_buffer_types",
+        ],
+    }),
+)
+
+cc_library(
     name = "llm_litert_npu_compiled_model_executor",
     srcs = ["llm_litert_npu_compiled_model_executor.cc"],
     hdrs = ["llm_litert_npu_compiled_model_executor.h"],
@@ -541,6 +587,7 @@ cc_library(
         ":llm_executor_io_types",
         ":llm_executor_processed_tokens",
         ":llm_executor_settings",
+        ":llm_litert_npu_compiled_model_executor_utils",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
