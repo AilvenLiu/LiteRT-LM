@@ -92,44 +92,13 @@ constexpr absl::string_view kv_cache_slice_k_root_name = "kv_slice_k_";
 constexpr absl::string_view kv_cache_slice_v_root_name = "kv_slice_v_";
 
 namespace {
-// Whether to use NEON optimizations for sampling.
-// TODO(yunandrew): Remove this once the NEON optimizations are stable, or
-// engine level provides nob for controlling this.
-static constexpr bool kUseNeonSamplingIfAvailable = false;
 
 using LogitsQuantizationParams =
     LlmLiteRtNpuCompiledModelExecutor::LogitsQuantizationParams;
 
-enum class KVCacheUpdateMethod {
-  kModel,
-  kWH,
-};
-
-// TODO(yunandrew): Remove these once engine level provides knob for controlling
-// this.
-static constexpr KVCacheUpdateMethod kPrefillKVCacheUpdateMethod =
-    KVCacheUpdateMethod::kModel;
-static constexpr KVCacheUpdateMethod kDecodeKVCacheUpdateMethod =
-    KVCacheUpdateMethod::kModel;
-
-enum class MaskUpdateMethod {
-  kModel,
-  kWH,
-};
-
-static constexpr MaskUpdateMethod kPrefillMaskUpdateMethod =
-    MaskUpdateMethod::kModel;
-static constexpr MaskUpdateMethod kDecodeMaskUpdateMethod =
-    MaskUpdateMethod::kModel;
-static constexpr MaskUpdateMethod kMtpMaskUpdateMethod =
-    MaskUpdateMethod::kModel;
-static constexpr MaskUpdateMethod kVerifyMaskUpdateMethod =
-    MaskUpdateMethod::kModel;
-
 }  // namespace
 
-constexpr bool kEnableDecodingDebugLogging = false;
-#define NPU_EXECUTOR_LOG(X) ABSL_LOG_IF(X, kEnableDecodingDebugLogging)
+#define NPU_EXECUTOR_LOG(X) ABSL_LOG_IF(X, npu_config_.enable_npu_debug_logging)
 
 // Signature names for the embedder.
 struct EmbedderSignatures {
@@ -932,9 +901,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::AllocateTransformerBuffers(
   auto verify_signature =
       transformer_model->FindSignature(LlmSignatures::kVerifyLlm);
   if (verify_signature) {
-    NPU_EXECUTOR_LOG(INFO) << "Verify signature found. Inputs:";
     for (auto input_name : verify_signature->InputNames()) {
-      NPU_EXECUTOR_LOG(INFO) << "  - " << input_name;
       LITERT_ASSIGN_OR_RETURN(gemma_verify_input_buffers[input_name],
                               llm_compiled_model.CreateInputBuffer(
                                   LlmSignatures::kVerifyLlm, input_name));
@@ -1611,7 +1578,7 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
         ApplyGreedySampling(
             llm_inference_context_
                 .decode_output_buffers[LlmSignatures::kDecodeLogitsOutput],
-            kUseNeonSamplingIfAvailable));
+            npu_config_.enable_neon_for_npu_greedy_sampling));
     latency_stats_.decode_sampling_latency_us +=
         absl::ToInt64Microseconds(absl::Now() - start_sample);
 
@@ -1742,7 +1709,8 @@ LlmLiteRtNpuCompiledModelExecutor::Decode(
     auto start_sample = absl::Now();
     LITERT_ASSIGN_OR_RETURN(
         const int max_index,
-        ApplyGreedySampling(decoded_logits, kUseNeonSamplingIfAvailable));
+        ApplyGreedySampling(decoded_logits,
+                            npu_config_.enable_neon_for_npu_greedy_sampling));
     latency_stats_.decode_sampling_latency_us +=
         absl::ToInt64Microseconds(absl::Now() - start_sample);
 
@@ -1959,7 +1927,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::PrefillInternal(
   // Invoke mask signature.
   {
     auto start = absl::Now();
-    if (kPrefillMaskUpdateMethod == MaskUpdateMethod::kWH) {
+    if (prefill_mask_update_method_ == MaskUpdateMethod::kWH) {
       RETURN_IF_ERROR(HWMaskUpdate(mask_context_.prefill_input_buffers,
                                    mask_context_.prefill_output_buffers));
     } else {
@@ -1990,7 +1958,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::PrefillInternal(
   // Cache update.
   {
     auto start = absl::Now();
-    if (kPrefillKVCacheUpdateMethod == KVCacheUpdateMethod::kWH) {
+    if (prefill_kv_cache_update_method_ == KVCacheUpdateMethod::kWH) {
       RETURN_IF_ERROR(HWKVCacheUpdate(
           cache_update_inference_context_.prefill_input_buffers,
           cache_update_inference_context_.prefill_output_buffers));
@@ -2121,7 +2089,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::DecodeInternal(
   // Invoke mask signature.
   {
     auto start = absl::Now();
-    if (kDecodeMaskUpdateMethod == MaskUpdateMethod::kWH) {
+    if (decode_mask_update_method_ == MaskUpdateMethod::kWH) {
       RETURN_IF_ERROR(HWMaskUpdate(mask_context_.decode_input_buffers,
                                    mask_context_.decode_output_buffers));
     } else {
@@ -2151,7 +2119,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::DecodeInternal(
   // Cache update.
   {
     auto start = absl::Now();
-    if (kDecodeKVCacheUpdateMethod == KVCacheUpdateMethod::kWH) {
+    if (decode_kv_cache_update_method_ == KVCacheUpdateMethod::kWH) {
       RETURN_IF_ERROR(HWKVCacheUpdate(
           cache_update_inference_context_.decode_input_buffers,
           cache_update_inference_context_.decode_output_buffers));
@@ -2245,7 +2213,7 @@ LlmLiteRtNpuCompiledModelExecutor::RunDrafterLoop(int start_step,
       absl::ToInt64Microseconds(end - start);
 
   start = absl::Now();
-  if (kMtpMaskUpdateMethod == MaskUpdateMethod::kWH) {
+  if (mtp_mask_update_method_ == MaskUpdateMethod::kWH) {
     RETURN_IF_ERROR(
         HWMaskUpdate(aux_ctx.mask_input_buffers, aux_ctx.mask_output_buffers));
   } else {
@@ -2305,7 +2273,7 @@ LlmLiteRtNpuCompiledModelExecutor::RunDrafterLoop(int start_step,
     LITERT_ASSIGN_OR_RETURN(
         int draft_id, ApplyGreedySampling(
                           ctx.mtp_output_buffers[MtpSignatures::kOutputLogits],
-                          kUseNeonSamplingIfAvailable));
+                          npu_config_.enable_neon_for_npu_greedy_sampling));
     end = absl::Now();
     latency_stats_.decode_sampling_latency_us +=
         absl::ToInt64Microseconds(end - start);
@@ -2328,7 +2296,8 @@ LlmLiteRtNpuCompiledModelExecutor::RunDrafterLoop(int start_step,
 namespace {
 // Helper to sample from a batch of logits at a specific index.
 absl::StatusOr<int> GetLogitsAtBatchIndex(const TensorBuffer& logits_buffer,
-                                          int batch_idx) {
+                                          int batch_idx,
+                                          bool enable_neon_sampling) {
   LITERT_ASSIGN_OR_RETURN(RankedTensorType tensor_type,
                           logits_buffer.TensorType());
   LITERT_ASSIGN_OR_RETURN(
@@ -2378,7 +2347,7 @@ absl::StatusOr<int> GetLogitsAtBatchIndex(const TensorBuffer& logits_buffer,
 
   if (tensor_type.ElementType() == ::litert::ElementType::Float32) {
 #if defined(__ANDROID__) && defined(__ARM_NEON)
-    if (kUseNeonSamplingIfAvailable) {
+    if (enable_neon_sampling) {
       return FindMaxIndexFloatNeon(reinterpret_cast<const float*>(logits_ptr),
                                    vocab_size);
     }
@@ -2386,7 +2355,7 @@ absl::StatusOr<int> GetLogitsAtBatchIndex(const TensorBuffer& logits_buffer,
     return find_max_index_plain(reinterpret_cast<const float*>(logits_ptr));
   } else if (tensor_type.ElementType() == ::litert::ElementType::Int16) {
 #if defined(__ANDROID__) && defined(__ARM_NEON)
-    if (kUseNeonSamplingIfAvailable) {
+    if (enable_neon_sampling) {
       return FindMaxIndexInt16Neon(reinterpret_cast<const int16_t*>(logits_ptr),
                                    vocab_size);
     }
@@ -2394,7 +2363,7 @@ absl::StatusOr<int> GetLogitsAtBatchIndex(const TensorBuffer& logits_buffer,
     return find_max_index_plain(reinterpret_cast<const int16_t*>(logits_ptr));
   } else if (tensor_type.ElementType() == ::litert::ElementType::Int8) {
 #if defined(__ANDROID__) && defined(__ARM_NEON)
-    if (kUseNeonSamplingIfAvailable) {
+    if (enable_neon_sampling) {
       return FindMaxIndexInt8Neon(reinterpret_cast<const int8_t*>(logits_ptr),
                                   vocab_size);
     }
@@ -2513,7 +2482,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::RunVerifierBatch(
       npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
           RopeSignatures::kVerifyRope, rope_context_.verify_input_buffers,
           rope_context_.verify_output_buffers));
-  if (kVerifyMaskUpdateMethod == MaskUpdateMethod::kWH) {
+  if (verify_mask_update_method_ == MaskUpdateMethod::kWH) {
     LITERT_RETURN_IF_ERROR(HWMaskUpdate(mask_context_.verify_input_buffers,
                                         mask_context_.verify_output_buffers));
   } else {
@@ -2540,8 +2509,10 @@ LlmLiteRtNpuCompiledModelExecutor::PerformRejectionSampling(
   // Log all sampled tokens from the verifier for transparency.
   std::vector<int> all_verifier_sampled;
   for (int i = 0; i < draft_tokens.size() + 1; ++i) {
-    LITERT_ASSIGN_OR_RETURN(int sampled_token,
-                            GetLogitsAtBatchIndex(verifier_logits_buffer, i));
+    LITERT_ASSIGN_OR_RETURN(
+        int sampled_token,
+        GetLogitsAtBatchIndex(verifier_logits_buffer, i,
+                              npu_config_.enable_neon_for_npu_greedy_sampling));
     all_verifier_sampled.push_back(sampled_token);
   }
   NPU_EXECUTOR_LOG(INFO) << "    [RS] Verifier Sampled Tokens: ["
@@ -2565,7 +2536,8 @@ LlmLiteRtNpuCompiledModelExecutor::PerformRejectionSampling(
   if (num_accepted == draft_tokens.size()) {
     LITERT_ASSIGN_OR_RETURN(
         bonus_token_id,
-        GetLogitsAtBatchIndex(verifier_logits_buffer, num_accepted));
+        GetLogitsAtBatchIndex(verifier_logits_buffer, num_accepted,
+                              npu_config_.enable_neon_for_npu_greedy_sampling));
   }
   latency_stats_.mtp_num_draft_tokens += draft_tokens.size();
   latency_stats_.mtp_num_accepted_tokens += num_accepted;
@@ -2594,7 +2566,7 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::CommitVerifiedKVCache(
       pos_ptr[i] = start_step + i;
     }
   }
-  if (kPrefillKVCacheUpdateMethod == KVCacheUpdateMethod::kWH) {
+  if (prefill_kv_cache_update_method_ == KVCacheUpdateMethod::kWH) {
     RETURN_IF_ERROR(
         HWKVCacheUpdate(cache_update_inference_context_.verify_input_buffers,
                         cache_update_inference_context_.verify_output_buffers));
