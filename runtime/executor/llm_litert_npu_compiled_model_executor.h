@@ -78,6 +78,9 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
     uint64_t decode_drafter_inference_latency_us = 0;
     uint64_t decode_cache_update_inference_latency_us = 0;
     uint64_t decode_sampling_latency_us = 0;
+    uint64_t decode_mtp_rejection_sampling_latency_us = 0;
+    uint64_t decode_mtp_activation_copy_latency_us = 0;
+    uint64_t decode_token_queue_latency_us = 0;
 
     // MTP / Speculative Decoding latency stats.
     int mtp_num_draft_tokens = 0;
