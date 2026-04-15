@@ -497,6 +497,8 @@ TEST_P(ConversationTest, SendSingleMessage) {
             user_callback(Responses(TaskState::kDone));
             return nullptr;
           });
+  EXPECT_CALL(*mock_session_ptr, WaitUntilDone())
+      .WillOnce(Return(absl::OkStatus()));
 
   ASSERT_OK_AND_ASSIGN(const Message response,
                        conversation->SendMessage(user_message));
