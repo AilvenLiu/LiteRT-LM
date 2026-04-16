@@ -515,8 +515,7 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
           drafter_aux_output_buffers);
 
   static absl::Status AllocateTransformerBuffers(
-      litert::Environment& env, const litert::Model* transformer_model,
-      CompiledModel& llm_compiled_model,
+      litert::Environment& env, CompiledModel& llm_compiled_model,
       absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
           gemma_prefill_input_buffers,
       absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
@@ -536,14 +535,14 @@ class LlmLiteRtNpuCompiledModelExecutor : public LlmExecutor {
   static absl::StatusOr<std::unique_ptr<LlmLiteRtNpuCompiledModelExecutor>>
   CreateForModelHasPerLayerEmbedding(
       const LlmExecutorSettings& executor_settings, ModelResources& resources,
-      litert::Environment& env, const litert::Model* transformer_model,
+      litert::Environment& env, std::shared_ptr<const Model> transformer_model,
       LogitsQuantizationParams quantization_params);
 
   // Create the executor for Gemma3.
   static absl::StatusOr<std::unique_ptr<LlmLiteRtNpuCompiledModelExecutor>>
   CreateForModelWithoutPerLayerEmbedding(
       const LlmExecutorSettings& executor_settings, ModelResources& resources,
-      litert::Environment& env, const litert::Model* transformer_model,
+      litert::Environment& env, std::shared_ptr<const Model> transformer_model,
       LogitsQuantizationParams quantization_params);
 
   LlmExecutorSettings executor_settings_;

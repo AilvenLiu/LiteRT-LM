@@ -65,6 +65,67 @@ TEST(ModelResourcesTest, InitializeWithValidLitertLmLoader) {
   ASSERT_NE(tokenizer.value(), nullptr);
 }
 
+TEST(ModelResourcesTest, ReleaseTFLiteModel) {
+  const auto model_path =
+      std::filesystem::path(::testing::SrcDir()) /
+      "litert_lm/runtime/testdata/test_lm.litertlm";
+  auto model_file = ScopedFile::Open(model_path.string());
+  ASSERT_TRUE(model_file.ok());
+  ASSERT_OK_AND_ASSIGN(auto loader,
+                       LitertLmLoader::Create(std::move(model_file.value())));
+
+  auto model_resources = ModelResourcesLitertLm::Create(std::move(loader));
+  ASSERT_OK(model_resources);
+
+  // Load the model.
+  auto tflite_model =
+      model_resources.value()->GetTFLiteModel(ModelType::kTfLitePrefillDecode);
+  ASSERT_OK(tflite_model);
+
+  // Release the model.
+  ASSERT_OK(model_resources.value()->ReleaseTFLiteModel(
+      ModelType::kTfLitePrefillDecode, /*release_weights=*/true));
+
+  // Subsequent GetTFLiteModelBuffer should return NotFound.
+  EXPECT_THAT(model_resources.value()->GetTFLiteModelBuffer(
+                  ModelType::kTfLitePrefillDecode),
+              testing::status::StatusIs(absl::StatusCode::kNotFound));
+}
+
+TEST(ModelResourcesTest, ReleaseTFLiteModelKeepWeights) {
+  const auto model_path =
+      std::filesystem::path(::testing::SrcDir()) /
+      "litert_lm/runtime/testdata/test_lm_external_weights.litertlm";
+  auto model_file = ScopedFile::Open(model_path.string());
+  ASSERT_TRUE(model_file.ok());
+  ASSERT_OK_AND_ASSIGN(auto loader,
+                       LitertLmLoader::Create(std::move(model_file.value())));
+
+  auto model_resources = ModelResourcesLitertLm::Create(std::move(loader));
+  ASSERT_OK(model_resources);
+
+  // Load the model and weights.
+  auto tflite_model =
+      model_resources.value()->GetTFLiteModel(ModelType::kTfLitePrefillDecode);
+  ASSERT_OK(tflite_model);
+  auto weights_offset = model_resources.value()->GetWeightsSectionOffset(
+      ModelType::kTfLitePrefillDecode);
+  ASSERT_OK(weights_offset);
+
+  // Release the model but keep weights.
+  ASSERT_OK(model_resources.value()->ReleaseTFLiteModel(
+      ModelType::kTfLitePrefillDecode, /*release_weights=*/false));
+
+  // Model should be released.
+  EXPECT_THAT(model_resources.value()->GetTFLiteModelBuffer(
+                  ModelType::kTfLitePrefillDecode),
+              testing::status::StatusIs(absl::StatusCode::kNotFound));
+
+  // Weights should still be accessible.
+  EXPECT_OK(model_resources.value()->GetWeightsSectionOffset(
+      ModelType::kTfLitePrefillDecode));
+}
+
 TEST(ModelResourcesTest, InitializeWithExternalWeights) {
   const auto model_path =
       std::filesystem::path(::testing::SrcDir()) /

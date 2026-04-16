@@ -39,6 +39,7 @@ class MemoryMappedFilePosix : public MemoryMappedFile {
       : length_(length), data_(data) {}
   ~MemoryMappedFilePosix() override {
     if (data_) {
+      ABSL_LOG(INFO) << "munmap address " << data_ << " length " << length_;
       munmap(data_, length_);
     }
   }

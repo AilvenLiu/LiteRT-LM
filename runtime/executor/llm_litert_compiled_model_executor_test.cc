@@ -437,24 +437,26 @@ class TfLiteModelResources : public ModelResources {
     LITERT_ASSIGN_OR_RETURN(auto path, model_assets.GetPath());
     LITERT_ASSIGN_OR_RETURN(auto model,
                             Model::CreateFromFile(std::string(path)));
-    return absl::WrapUnique(
-        new TfLiteModelResources(std::move(model), with_mtp_drafter));
+    return absl::WrapUnique(new TfLiteModelResources(
+        std::make_shared<const Model>(std::move(model)), with_mtp_drafter));
   }
 
  private:
-  explicit TfLiteModelResources(Model model, bool with_mtp_drafter = false)
+  explicit TfLiteModelResources(std::shared_ptr<const Model> model,
+                                bool with_mtp_drafter = false)
       : model_(std::move(model)), with_mtp_drafter_(with_mtp_drafter) {}
 
  public:
   // ModelResources implementation:
-  absl::StatusOr<const Model*> GetTFLiteModel(ModelType model_type) override {
+  absl::StatusOr<std::shared_ptr<const Model>> GetTFLiteModel(
+      ModelType model_type) override {
     if (model_type == ModelType::kTfLitePrefillDecode) {
-      return &model_;
+      return model_;
     }
     if (model_type == ModelType::kTfLiteMtpDrafter) {
       if (with_mtp_drafter_) {
         // Reuse the same model for testing MTP drafter creation
-        return &model_;
+        return model_;
       } else {
         return absl::NotFoundError("MTP Drafter model not found");
       }
@@ -490,7 +492,7 @@ class TfLiteModelResources : public ModelResources {
   }
 
  private:
-  Model model_;
+  std::shared_ptr<const Model> model_;
   bool with_mtp_drafter_;
 };
 

@@ -55,11 +55,11 @@ absl::StatusOr<std::unique_ptr<ModelResources>> ModelResourcesLitertLm::Create(
       new ModelResourcesLitertLm(std::move(litert_lm_loader)));
 };
 
-absl::StatusOr<const litert::Model*> ModelResourcesLitertLm::GetTFLiteModel(
-    ModelType model_type) {
+absl::StatusOr<std::shared_ptr<const litert::Model>>
+ModelResourcesLitertLm::GetTFLiteModel(ModelType model_type) {
   auto it = model_map_.find(model_type);
   if (it != model_map_.end()) {
-    return it->second.get();
+    return it->second;
   }
 
   litert::BufferRef<uint8_t> buffer_ref =
@@ -71,8 +71,9 @@ absl::StatusOr<const litert::Model*> ModelResourcesLitertLm::GetTFLiteModel(
                                             " not found in the model."));
   }
   LITERT_ASSIGN_OR_RETURN(auto model, Model::CreateFromBuffer(buffer_ref));
-  model_map_[model_type] = std::make_unique<litert::Model>(std::move(model));
-  return model_map_[model_type].get();
+  model_map_[model_type] =
+      std::make_shared<const litert::Model>(std::move(model));
+  return model_map_[model_type];
 }
 
 std::optional<std::string>
@@ -154,6 +155,21 @@ absl::StatusOr<std::pair<size_t, size_t>>
 ModelResourcesLitertLm::GetWeightsSectionOffset(ModelType model_type) {
   return litert_lm_loader_->GetSectionLocation(
       BufferKey(schema::AnySectionDataType_TFLiteWeights, model_type));
+}
+
+absl::Status ModelResourcesLitertLm::ReleaseTFLiteModel(ModelType model_type,
+                                                        bool release_weights) {
+  model_map_.erase(model_type);
+  RETURN_IF_ERROR(litert_lm_loader_->ReleaseSection(
+      BufferKey(schema::AnySectionDataType_TFLiteModel, model_type)));
+  if (release_weights) {
+    // Only release the weights if they were mapped and not used as external
+    // weights.
+    model_map_.erase(model_type);
+    RETURN_IF_ERROR(litert_lm_loader_->ReleaseSection(
+        BufferKey(schema::AnySectionDataType_TFLiteWeights, model_type)));
+  }
+  return absl::OkStatus();
 }
 
 }  // namespace litert::lm

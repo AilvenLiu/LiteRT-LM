@@ -148,7 +148,7 @@ class ModelResources {
   // Returns the litert model. We will create the model if it is not created
   // yet. And the model is created from memory mapped file, so physical memory
   // is only allocated when the model is actually used.
-  virtual absl::StatusOr<const litert::Model*> GetTFLiteModel(
+  virtual absl::StatusOr<std::shared_ptr<const litert::Model>> GetTFLiteModel(
       ModelType model_type) = 0;
 
   // Returns the TFLite model buffer. Note that the returned string_view is
@@ -179,6 +179,14 @@ class ModelResources {
 
   // Returns the llm metadata.
   virtual absl::StatusOr<const proto::LlmMetadata*> GetLlmMetadata() = 0;
+
+  // Releases the TFLite model from RAM. This is used to reduce peak memory
+  // usage after the model has been compiled into a hardware-specific
+  // executable.
+  virtual absl::Status ReleaseTFLiteModel(ModelType model_type,
+                                          bool release_weights = true) {
+    return absl::OkStatus();
+  }
 };
 
 }  // namespace litert::lm

@@ -68,6 +68,14 @@ struct BufferKey {
   bool operator==(const BufferKey& other) const {
     return data_type == other.data_type && model_type == other.model_type;
   }
+
+  std::string ToString() const {
+    std::string res = EnumNameAnySectionDataType(data_type);
+    if (model_type.has_value()) {
+      absl::StrAppend(&res, ":", ModelTypeToString(model_type.value()));
+    }
+    return res;
+  }
 };
 
 // Extracts the BufferKey and backend constraint from the section metadata.
@@ -159,6 +167,11 @@ class LitertLmLoader {
 
   absl::StatusOr<std::pair<size_t, size_t>> GetSectionLocation(
       BufferKey buffer_key) const;
+
+  // Releases the section buffer and the memory mapped file associated with the
+  // given buffer key.
+  absl::Status ReleaseSection(BufferKey buffer_key)
+      ABSL_LOCKS_EXCLUDED(section_buffers_mutex_);
 
   absl::StatusOr<std::reference_wrapper<ScopedFile>> GetScopedFile();
 

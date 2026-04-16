@@ -231,15 +231,15 @@ absl::StatusOr<
     std::unique_ptr<AudioLiteRtCompiledModelExecutor::AudioStaticEncoder>>
 AudioLiteRtCompiledModelExecutor::AudioStaticEncoder::Create(
     const AudioExecutorSettings& executor_settings, Environment& env,
-    const Model* absl_nonnull model) {
+    std::shared_ptr<const Model> model) {
   auto handler = std::unique_ptr<AudioStaticEncoder>(
-      new AudioStaticEncoder(executor_settings, env, model));
-  RETURN_IF_ERROR(handler->Initialize());
+      new AudioStaticEncoder(executor_settings, env));
+  RETURN_IF_ERROR(handler->Initialize(*model));
   return handler;
 }
 
-absl::Status
-AudioLiteRtCompiledModelExecutor::AudioStaticEncoder::Initialize() {
+absl::Status AudioLiteRtCompiledModelExecutor::AudioStaticEncoder::Initialize(
+    const Model& model) {
   LITERT_ASSIGN_OR_RETURN(auto options, Options::Create());
   auto weight_cache_file = executor_settings_.GetWeightCacheFile(
       ".static_audio_encoder.xnnpack_cache");
@@ -274,15 +274,15 @@ AudioLiteRtCompiledModelExecutor::AudioStaticEncoder::Initialize() {
   }
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
-                          CompiledModel::Create(env_, model_.Get(), options));
-  LITERT_ASSIGN_OR_RETURN(auto signatures, model_.GetSignatures());
+                          CompiledModel::Create(env_, model.Get(), options));
+  LITERT_ASSIGN_OR_RETURN(auto signatures, model.GetSignatures());
   if (signatures.size() != 1) {
     return absl::InvalidArgumentError(
         absl::StrCat("The Audio Static Encoder model must have exactly one "
                      "signature but got ",
                      signatures.size()));
   }
-  LITERT_ASSIGN_OR_RETURN(auto signature, model_.GetSignature(0));
+  LITERT_ASSIGN_OR_RETURN(auto signature, model.GetSignature(0));
 
   // Initialize the input buffers.
   LITERT_ASSIGN_OR_RETURN(auto input_buffers,
@@ -361,15 +361,16 @@ absl::StatusOr<
     std::unique_ptr<AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder>>
 AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::Create(
     const AudioExecutorSettings& executor_settings, Environment& env,
-    const Model* absl_nonnull model) {
+    std::shared_ptr<const Model> model) {
   auto handler = std::unique_ptr<AudioStreamingEncoder>(
-      new AudioStreamingEncoder(executor_settings, env, model));
-  RETURN_IF_ERROR(handler->Initialize());
+      new AudioStreamingEncoder(executor_settings, env));
+  RETURN_IF_ERROR(handler->Initialize(*model));
   return handler;
 }
 
 absl::Status
-AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::Initialize() {
+AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::Initialize(
+    const Model& model) {
   LITERT_ASSIGN_OR_RETURN(auto options, Options::Create());
   auto weight_cache_file = executor_settings_.GetWeightCacheFile(
       ".streaming_audio_encoder.xnnpack_cache");
@@ -405,15 +406,15 @@ AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::Initialize() {
   }
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
-                          CompiledModel::Create(env_, model_.Get(), options));
-  LITERT_ASSIGN_OR_RETURN(auto signatures, model_.GetSignatures());
+                          CompiledModel::Create(env_, model.Get(), options));
+  LITERT_ASSIGN_OR_RETURN(auto signatures, model.GetSignatures());
   if (signatures.size() != 1) {
     return absl::InvalidArgumentError(absl::StrCat(
         "The Audio Encoder model must have exactly one signature but got ",
         signatures.size()));
   }
 
-  LITERT_ASSIGN_OR_RETURN(auto signature, model_.GetSignature(0));
+  LITERT_ASSIGN_OR_RETURN(auto signature, model.GetSignature(0));
 
   // Initialize the input buffers.
   LITERT_ASSIGN_OR_RETURN(auto input_buffers,
@@ -552,14 +553,15 @@ absl::Status AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::Reset() {
 absl::StatusOr<std::unique_ptr<AudioLiteRtCompiledModelExecutor::AudioAdapter>>
 AudioLiteRtCompiledModelExecutor::AudioAdapter::Create(
     const AudioExecutorSettings& executor_settings, Environment& env,
-    const Model* absl_nonnull model) {
-  auto handler = std::unique_ptr<AudioAdapter>(
-      new AudioAdapter(executor_settings, env, model));
-  RETURN_IF_ERROR(handler->Initialize());
+    std::shared_ptr<const Model> model) {
+  auto handler =
+      std::unique_ptr<AudioAdapter>(new AudioAdapter(executor_settings, env));
+  RETURN_IF_ERROR(handler->Initialize(*model));
   return handler;
 }
 
-absl::Status AudioLiteRtCompiledModelExecutor::AudioAdapter::Initialize() {
+absl::Status AudioLiteRtCompiledModelExecutor::AudioAdapter::Initialize(
+    const Model& model) {
   LITERT_ASSIGN_OR_RETURN(auto options, Options::Create());
   auto weight_cache_file =
       executor_settings_.GetWeightCacheFile(".audio_adapter.xnnpack_cache");
@@ -590,8 +592,8 @@ absl::Status AudioLiteRtCompiledModelExecutor::AudioAdapter::Initialize() {
   }
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
-                          CompiledModel::Create(env_, model_.Get(), options));
-  LITERT_ASSIGN_OR_RETURN(auto signatures, model_.GetSignatures());
+                          CompiledModel::Create(env_, model.Get(), options));
+  LITERT_ASSIGN_OR_RETURN(auto signatures, model.GetSignatures());
   if (signatures.size() != 1) {
     return absl::InvalidArgumentError(absl::StrCat(
         "The Audio Adapter model must have exactly one signature but got ",
@@ -615,7 +617,7 @@ absl::Status AudioLiteRtCompiledModelExecutor::AudioAdapter::Initialize() {
                      output_buffers_.size()));
   }
 
-  LITERT_ASSIGN_OR_RETURN(auto signature, model_.GetSignature(0));
+  LITERT_ASSIGN_OR_RETURN(auto signature, model.GetSignature(0));
   for (int i = 0; i < signature.InputNames().size(); ++i) {
     if (absl::StrContains(signature.InputNames()[i], kFeaturesName)) {
       features_buffer_ = &input_buffers_[i];
@@ -655,17 +657,29 @@ AudioLiteRtCompiledModelExecutor::Create(
   const bool is_streaming_encoder =
       IsStreamingEncoder(encoder_signature.InputNames());
   if (is_streaming_encoder) {
-    ASSIGN_OR_RETURN(audio_encoder,
-                     AudioStreamingEncoder::Create(executor_settings, env,
-                                                   audio_encoder_model));
+    ASSIGN_OR_RETURN(audio_encoder, AudioStreamingEncoder::Create(
+                                        executor_settings, env,
+                                        std::move(audio_encoder_model)));
   } else {
-    ASSIGN_OR_RETURN(audio_encoder,
-                     AudioStaticEncoder::Create(executor_settings, env,
-                                                audio_encoder_model));
+    ASSIGN_OR_RETURN(audio_encoder, AudioStaticEncoder::Create(
+                                        executor_settings, env,
+                                        std::move(audio_encoder_model)));
   }
-  LITERT_ASSIGN_OR_RETURN(
-      auto audio_adapter,
-      AudioAdapter::Create(executor_settings, env, audio_adapter_model));
+
+  if (auto is_fully_accelerated = audio_encoder->GetMutableCompiledModel().IsFullyAccelerated(); is_fully_accelerated.HasValue() && *is_fully_accelerated) {
+    RETURN_IF_ERROR(resources->ReleaseTFLiteModel(
+        ModelType::kTfLiteAudioEncoderHw, /*release_weights=*/true));
+  }
+
+  LITERT_ASSIGN_OR_RETURN(auto audio_adapter,
+                          AudioAdapter::Create(executor_settings, env,
+                                               std::move(audio_adapter_model)));
+
+  if (auto is_fully_accelerated = audio_adapter->GetMutableCompiledModel().IsFullyAccelerated(); is_fully_accelerated.HasValue() && *is_fully_accelerated) {
+    RETURN_IF_ERROR(resources->ReleaseTFLiteModel(ModelType::kTfLiteAudioAdapter,
+                                                  /*release_weights=*/true));
+  }
+
   const auto& tmp = audio_encoder->GetInputMaskBuffer();
   LITERT_ASSIGN_OR_RETURN(auto mask_tensor_type, tmp.TensorType());
   LITERT_ASSIGN_OR_RETURN(int sequence_length,
@@ -707,6 +721,7 @@ AudioLiteRtCompiledModelExecutor::Create(
   ABSL_LOG(INFO) << "AudioLiteRtCompiledModelExecutor created with "
                     "encoder_shrinking_factor: "
                  << encoder_shrinking_factor;
+
   return absl::WrapUnique(new AudioLiteRtCompiledModelExecutor(
       std::move(executor_settings), std::move(executor_properties), env,
       std::move(resources), std::move(audio_encoder), std::move(audio_adapter),

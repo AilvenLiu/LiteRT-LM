@@ -86,7 +86,8 @@ absl::Status InitializeEmbeddingLookups(
     litert::Environment& env, ModelResources& resources,
     std::unique_ptr<EmbeddingLookupManager>& embedding_lookup,
     std::unique_ptr<EmbeddingLookupManager>& per_layer_embedding_lookup) {
-  absl::flat_hash_map<int, const Model*> end_of_multi_modal_embedding_models;
+  absl::flat_hash_map<int, std::shared_ptr<const Model>>
+      end_of_multi_modal_embedding_models;
   {
     auto end_of_audio_model =
         resources.GetTFLiteModel(ModelType::kTfLiteEndOfAudio);
@@ -107,20 +108,24 @@ absl::Status InitializeEmbeddingLookups(
   auto text_embedder_model =
       resources.GetTFLiteModel(ModelType::kTfLiteEmbedder);
   if (text_embedder_model.ok()) {
+    absl::flat_hash_map<int, const Model*> raw_model_map;
+    for (const auto& [token, model] : end_of_multi_modal_embedding_models) {
+      raw_model_map[token] = model.get();
+    }
     ASSIGN_OR_RETURN(
         embedding_lookup,
-        EmbeddingLookupManager::Create(env, *text_embedder_model,
-                                       end_of_multi_modal_embedding_models));
+        EmbeddingLookupManager::Create(env, text_embedder_model.value().get(),
+                                       raw_model_map));
   }
 
   // Create per layer embedding lookups from the resources.
   auto per_layer_embedder_model =
       resources.GetTFLiteModel(ModelType::kTfLitePerLayerEmbedder);
   if (per_layer_embedder_model.ok()) {
-    ASSIGN_OR_RETURN(
-        per_layer_embedding_lookup,
-        EmbeddingLookupManager::Create(env, *per_layer_embedder_model,
-                                       /*fully_supports_multi_modal=*/false));
+    ASSIGN_OR_RETURN(per_layer_embedding_lookup,
+                     EmbeddingLookupManager::Create(
+                         env, per_layer_embedder_model.value().get(),
+                         /*fully_supports_multi_modal=*/false));
   }
   return absl::OkStatus();
 }
@@ -390,7 +395,7 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::CreatePrefillInputBuffers(
     absl::flat_hash_map<absl::string_view, TensorBuffer>&
         prefill_input_buffers) {
   auto dyn_shape_resolver = [&](absl::string_view tensor_name) -> absl::Status {
-    return ResolveDynamicShape(model_, compiled_model_, prefill_signature,
+    return ResolveDynamicShape(*model_, compiled_model_, prefill_signature,
                                tensor_name, sequence_length);
   };
   // Create input_token, positions and attn_mask buffers after determining
@@ -440,7 +445,7 @@ absl::Status LlmLiteRtCompiledModelExecutorBase::CreatePrefillInputBuffers(
 
   if (signatures_.input_attn_mask.has_value()) {
     ASSIGN_OR_RETURN(bool is_attn_dyn,
-                     HasDynamicDim(model_, prefill_signature,
+                     HasDynamicDim(*model_, prefill_signature,
                                    signatures_.input_attn_mask.value()));
     if (is_attn_dyn) {
       std::vector<int> new_shape = {1, 1, sequence_length, context_length};
@@ -1544,6 +1549,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       CreateCompilationOptions(executor_settings, activation_data_type,
                                &signatures));
 
+  bool use_external_weights = false;
   auto section_offset =
       resources.GetWeightsSectionOffset(ModelType::kTfLitePrefillDecode);
   if (section_offset.ok()) {
@@ -1552,6 +1558,7 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
           "Weights section offset is only "
           "supported for GPU backend.");
     }
+    use_external_weights = true;
     Options::ScopedWeightSectionMap section_map;
     section_map["tflite_weights"] = {
         section_offset.value().first,
@@ -1737,8 +1744,8 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
     }
   }
 
-  return absl::WrapUnique(new LlmLiteRtCompiledModelExecutorStatic(
-      std::move(executor_settings), lrt_env, litert_model,
+  auto executor = absl::WrapUnique(new LlmLiteRtCompiledModelExecutorStatic(
+      std::move(executor_settings), lrt_env, std::move(litert_model),
       std::move(compiled_model), std::move(decode_input_buffers),
       std::move(decode_output_buffers), std::move(input_kv_cache_buffers),
       std::move(output_kv_cache_buffers),
@@ -1747,6 +1754,14 @@ LlmLiteRtCompiledModelExecutorStatic::Create(
       signatures, batch_size, std::move(cache_path),
       std::move(embedding_lookup), std::move(per_layer_embedding_lookup),
       use_fp16_precision, activation_data_type, std::move(mtp_drafter)));
+
+  if (auto is_fully_accelerated = compiled_model.IsFullyAccelerated(); is_fully_accelerated.HasValue() && *is_fully_accelerated) {
+    RETURN_IF_ERROR(
+        resources.ReleaseTFLiteModel(ModelType::kTfLitePrefillDecode,
+                                     /*release_weights=*/true));
+  }
+
+  return executor;
 }
 
 /* ===========================================================================*/
@@ -1810,7 +1825,7 @@ absl::Status LlmLiteRtCompiledModelExecutorDynamic::PrefillInternal(
         !executor_settings_.GetAdvancedSettings() ||
         executor_settings_.GetAdvancedSettings()->clear_kv_cache_before_prefill;
     for (const auto& k_cache_input_name : key_cache_input_names_) {
-      RETURN_IF_ERROR(ResolveDynamicShape(model_, compiled_model_, "prefill",
+      RETURN_IF_ERROR(ResolveDynamicShape(*model_, compiled_model_, "prefill",
                                           k_cache_input_name, prefill_length));
       LITERT_ASSIGN_OR_RETURN(
           auto input_buffer,
@@ -1821,7 +1836,7 @@ absl::Status LlmLiteRtCompiledModelExecutorDynamic::PrefillInternal(
       kv_cache_buffers_1_[k_cache_input_name] = std::move(input_buffer);
     }
     for (const auto& v_cache_input_name : value_cache_input_names_) {
-      RETURN_IF_ERROR(ResolveDynamicShape(model_, compiled_model_, "prefill",
+      RETURN_IF_ERROR(ResolveDynamicShape(*model_, compiled_model_, "prefill",
                                           v_cache_input_name, prefill_length));
       LITERT_ASSIGN_OR_RETURN(
           auto input_buffer,
@@ -1847,7 +1862,7 @@ absl::Status LlmLiteRtCompiledModelExecutorDynamic::PrefillInternal(
       int new_kv_seq_len = kv_length + prefill_length;
       int entries_to_add = new_kv_seq_len - kv_length;
       for (const auto& k_cache_input_name : key_cache_input_names_) {
-        RETURN_IF_ERROR(ResolveDynamicShape(model_, compiled_model_, "prefill",
+        RETURN_IF_ERROR(ResolveDynamicShape(*model_, compiled_model_, "prefill",
                                             k_cache_input_name,
                                             new_kv_seq_len));
         ASSIGN_OR_RETURN(kv_cache_buffers_1_[k_cache_input_name],
@@ -1856,7 +1871,7 @@ absl::Status LlmLiteRtCompiledModelExecutorDynamic::PrefillInternal(
                              key_dynamic_dim_index_, entries_to_add));
       }
       for (const auto& v_cache_input_name : value_cache_input_names_) {
-        RETURN_IF_ERROR(ResolveDynamicShape(model_, compiled_model_, "prefill",
+        RETURN_IF_ERROR(ResolveDynamicShape(*model_, compiled_model_, "prefill",
                                             v_cache_input_name,
                                             new_kv_seq_len));
         ASSIGN_OR_RETURN(kv_cache_buffers_1_[v_cache_input_name],
@@ -1898,7 +1913,7 @@ absl::Status LlmLiteRtCompiledModelExecutorDynamic::DecodeInternal(
     int entries_to_add = kv_increament_size_;
     int new_kv_len = current_kv_len + entries_to_add;
     for (const auto& k_cache_input_name : key_cache_input_names_) {
-      RETURN_IF_ERROR(ResolveDynamicShape(model_, compiled_model_, "decode",
+      RETURN_IF_ERROR(ResolveDynamicShape(*model_, compiled_model_, "decode",
                                           k_cache_input_name, new_kv_len));
       ASSIGN_OR_RETURN(kv_cache_buffers_1_[k_cache_input_name],
                        ResizeKVCacheTensorBuffer(
@@ -1906,7 +1921,7 @@ absl::Status LlmLiteRtCompiledModelExecutorDynamic::DecodeInternal(
                            key_dynamic_dim_index_, entries_to_add));
     }
     for (const auto& v_cache_input_name : value_cache_input_names_) {
-      RETURN_IF_ERROR(ResolveDynamicShape(model_, compiled_model_, "decode",
+      RETURN_IF_ERROR(ResolveDynamicShape(*model_, compiled_model_, "decode",
                                           v_cache_input_name, new_kv_len));
       ASSIGN_OR_RETURN(kv_cache_buffers_1_[v_cache_input_name],
                        ResizeKVCacheTensorBuffer(
@@ -1916,7 +1931,7 @@ absl::Status LlmLiteRtCompiledModelExecutorDynamic::DecodeInternal(
     current_kv_len = new_kv_len;
   }
 
-  RETURN_IF_ERROR(ResolveDynamicShape(model_, compiled_model_, "decode",
+  RETURN_IF_ERROR(ResolveDynamicShape(*model_, compiled_model_, "decode",
                                       signatures_.input_attn_mask.value(),
                                       current_kv_len));
   LITERT_ASSIGN_OR_RETURN(
@@ -2058,8 +2073,9 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
   std::unique_ptr<EmbeddingLookupManager> per_layer_embedding_lookup;
   RETURN_IF_ERROR(InitializeEmbeddingLookups(
       lrt_env, resources, embedding_lookup, per_layer_embedding_lookup));
-  return absl::WrapUnique(new LlmLiteRtCompiledModelExecutorDynamic(
-      std::move(executor_settings), lrt_env, litert_model,
+
+  auto executor = absl::WrapUnique(new LlmLiteRtCompiledModelExecutorDynamic(
+      std::move(executor_settings), lrt_env, std::move(litert_model),
       std::move(compiled_model), std::move(decode_input_buffers),
       std::move(decode_output_buffers), prefill_chunk_size, k_dynamic_dim,
       v_dynamic_dim, kv_increament_size, std::move(key_cache_input_names),
@@ -2067,6 +2083,14 @@ LlmLiteRtCompiledModelExecutorDynamic::Create(
       std::move(weight_cache_path), std::move(embedding_lookup),
       std::move(per_layer_embedding_lookup), /*use_fp16_precision=*/false,
       /*logits_data_type=*/LogitsDataType::FLOAT32));
+
+  if (auto is_fully_accelerated = compiled_model.IsFullyAccelerated(); is_fully_accelerated.HasValue() && *is_fully_accelerated) {
+    RETURN_IF_ERROR(
+        resources.ReleaseTFLiteModel(ModelType::kTfLitePrefillDecode,
+                                     /*release_weights=*/true));
+  }
+
+  return executor;
 }
 
 }  // namespace litert::lm

@@ -111,15 +111,16 @@ class ModelResourcesMock : public ModelResources {
   MOCK_METHOD((absl::StatusOr<std::pair<size_t, size_t>>),
               GetWeightsSectionOffset, (ModelType model_type), (override));
 
-  absl::StatusOr<const litert::Model*> GetTFLiteModel(
+  absl::StatusOr<std::shared_ptr<const litert::Model>> GetTFLiteModel(
       ModelType model_type) override {
-    return &model_;
+    return model_;
   }
 
-  explicit ModelResourcesMock(const Model& model) : model_(model) {}
+  explicit ModelResourcesMock(std::shared_ptr<const Model> model)
+      : model_(std::move(model)) {}
 
  private:
-  const Model& model_;
+  std::shared_ptr<const Model> model_;
 };
 
 absl::StatusOr<LlmExecutorSettings> GetLlmExecutorSettings() {
@@ -133,7 +134,8 @@ TEST(MagicNumberConfigsHelperTest, None_DefaultSettings) {
   auto executor_settings = GetLlmExecutorSettings();
   EXPECT_OK(executor_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -152,7 +154,8 @@ TEST(MagicNumberConfigsHelperTest, None_ExplictSettings) {
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -168,7 +171,8 @@ TEST(MagicNumberConfigsHelperTest, ContextLength_DefaultSettings) {
   auto executor_settings = GetLlmExecutorSettings();
   EXPECT_OK(executor_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -192,7 +196,8 @@ TEST(MagicNumberConfigsHelperTest, ContextLength_ExplictSettings) {
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(1280);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -217,7 +222,8 @@ TEST(MagicNumberConfigsHelperTest,
   EXPECT_OK(executor_settings);
   executor_settings->SetMaxNumTokens(9000);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -244,7 +250,8 @@ TEST(MagicNumberConfigsHelperTest,
   AdvancedSettings advanced_settings{.verify_magic_numbers = true};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -279,7 +286,8 @@ TEST(MagicNumberConfigsHelperTest, Both_DefaultSettings) {
   auto executor_settings = GetLlmExecutorSettings();
   EXPECT_OK(executor_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -310,7 +318,8 @@ TEST(MagicNumberConfigsHelperTest, Both_ExplictSettings) {
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -341,7 +350,8 @@ TEST(MagicNumberConfigsHelperTest, Both_ExplictSettingsLargerThanMagicNumbers) {
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {5000}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -373,7 +383,8 @@ TEST(MagicNumberConfigsHelperTest, Both_ExplictSettingsWithVerifications) {
                                      .verify_magic_numbers = true};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -419,7 +430,8 @@ TEST(MagicNumberConfigsHelperTest,
                                      .verify_magic_numbers = true};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -456,7 +468,8 @@ TEST(MagicNumberConfigsHelperTest, DecodeBatch_DefaultSettings) {
   auto executor_settings = GetLlmExecutorSettings();
   EXPECT_OK(executor_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -493,7 +506,8 @@ TEST(MagicNumberConfigsHelperTest, DecodeBatch_ExplictSettings) {
                                      .num_output_candidates = 3};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -531,7 +545,8 @@ TEST(MagicNumberConfigsHelperTest,
                                      .num_output_candidates = 20};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -570,7 +585,8 @@ TEST(MagicNumberConfigsHelperTest,
                                      .verify_magic_numbers = true};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -622,7 +638,8 @@ TEST(MagicNumberConfigsHelperTest,
                                      .verify_magic_numbers = true};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -664,7 +681,8 @@ TEST(MagicNumberConfigsHelperTest, Multi_DefaultSettings) {
   auto executor_settings = GetLlmExecutorSettings();
   EXPECT_OK(executor_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -710,7 +728,8 @@ TEST(MagicNumberConfigsHelperTest, Multi_LessExplictSettings) {
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {1024, 128}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -758,7 +777,8 @@ TEST(MagicNumberConfigsHelperTest,
   AdvancedSettings advanced_settings{.prefill_batch_sizes = {512, 6144}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -805,7 +825,8 @@ TEST(MagicNumberConfigsHelperTest, Multi_MoreExplictSettings) {
       .prefill_batch_sizes = {1024, 128, 2048, 32, 8}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -854,7 +875,8 @@ TEST(MagicNumberConfigsHelperTest, Multi_MoreExplictSettings_SkipLast) {
       .prefill_batch_sizes = {1024, 128, 256, 512, 2048, 32}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -906,7 +928,8 @@ TEST(MagicNumberConfigsHelperTest,
       .prefill_batch_sizes = {1024, 64, 256, 512, 128}};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -957,7 +980,8 @@ TEST(MagicNumberConfigsHelperTest, Multi_LessExplictSettingsWithVerifications) {
                                      .verify_magic_numbers = true};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);
@@ -1024,7 +1048,8 @@ TEST(MagicNumberConfigsHelperTest,
                                      .verify_magic_numbers = true};
   executor_settings->SetAdvancedSettings(advanced_settings);
 
-  ModelResourcesMock model_resources(*model);
+  ModelResourcesMock model_resources(
+      std::make_shared<const Model>(std::move(*model)));
   MagicNumberConfigsHelper helper;
   auto env_options =
       helper.GetLiteRtEnvOptions(model_resources, *executor_settings);

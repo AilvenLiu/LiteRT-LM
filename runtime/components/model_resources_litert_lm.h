@@ -40,7 +40,7 @@ class ModelResourcesLitertLm : public ModelResources {
   static absl::StatusOr<std::unique_ptr<ModelResources>> Create(
       std::unique_ptr<LitertLmLoader> litert_lm_loader);
 
-  absl::StatusOr<const litert::Model*> GetTFLiteModel(
+  absl::StatusOr<std::shared_ptr<const litert::Model>> GetTFLiteModel(
       ModelType model_type) override;
 
   absl::StatusOr<absl::string_view> GetTFLiteModelBuffer(
@@ -61,6 +61,9 @@ class ModelResourcesLitertLm : public ModelResources {
   absl::StatusOr<std::pair<size_t, size_t>> GetWeightsSectionOffset(
       ModelType model_type) override;
 
+  absl::Status ReleaseTFLiteModel(ModelType model_type,
+                                  bool release_weights = true) override;
+
  protected:
   explicit ModelResourcesLitertLm(
       std::unique_ptr<LitertLmLoader> litert_lm_loader)
@@ -71,7 +74,8 @@ class ModelResourcesLitertLm : public ModelResources {
   std::unique_ptr<LitertLmLoader> litert_lm_loader_;
 
  private:
-  absl::flat_hash_map<ModelType, std::unique_ptr<litert::Model>> model_map_;
+  absl::flat_hash_map<ModelType, std::shared_ptr<const litert::Model>>
+      model_map_;
   std::unique_ptr<proto::LlmMetadata> llm_metadata_;
 };
 

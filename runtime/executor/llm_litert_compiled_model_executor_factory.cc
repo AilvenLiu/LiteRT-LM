@@ -131,7 +131,7 @@ absl::StatusOr<std::unique_ptr<LlmExecutor>>
 CreateCpuOrGpuLlmLiteRtCompiledModelExecutor(
     LlmExecutorSettings executor_settings, Environment& lrt_env,
     ModelResources& resources) {
-  ASSIGN_OR_RETURN(const litert::Model* litert_model,
+  ASSIGN_OR_RETURN(auto litert_model,
                    resources.GetTFLiteModel(ModelType::kTfLitePrefillDecode));
 
   std::unique_ptr<LlmExecutor> executor;

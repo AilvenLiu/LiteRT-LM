@@ -55,11 +55,11 @@ absl::StatusOr<absl::string_view> ModelResourcesTask::GetTFLiteModelBuffer(
   return model_asset_bundle_resources_->GetFile(model_file);
 };
 
-absl::StatusOr<const litert::Model*> ModelResourcesTask::GetTFLiteModel(
-    ModelType model_type) {
+absl::StatusOr<std::shared_ptr<const litert::Model>>
+ModelResourcesTask::GetTFLiteModel(ModelType model_type) {
   auto it = model_map_.find(model_type);
   if (it != model_map_.end()) {
-    return it->second.get();
+    return it->second;
   }
 
   std::string model_file = litert::lm::ModelTypeToString(model_type);
@@ -71,8 +71,8 @@ absl::StatusOr<const litert::Model*> ModelResourcesTask::GetTFLiteModel(
   ABSL_LOG(INFO) << "litert model size: " << buffer->size();
   auto buffer_ref = BufferRef<uint8_t>(buffer->data(), buffer->size());
   LITERT_ASSIGN_OR_RETURN(auto model, Model::CreateFromBuffer(buffer_ref));
-  model_map_[model_type] = std::make_unique<Model>(std::move(model));
-  return model_map_[model_type].get();
+  model_map_[model_type] = std::make_shared<const Model>(std::move(model));
+  return model_map_[model_type];
 }
 
 absl::StatusOr<std::unique_ptr<Tokenizer>> ModelResourcesTask::GetTokenizer() {

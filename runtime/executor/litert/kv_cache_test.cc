@@ -88,7 +88,7 @@ class LitertKVCacheTest : public ::testing::Test {
   }
 
   std::unique_ptr<ModelResources> resources_;
-  const litert::Model* litert_model_;
+  std::shared_ptr<const litert::Model> litert_model_;
   std::optional<Environment> env_;
   std::optional<CompiledModel> compiled_model_;
   std::unique_ptr<LitertKVCache> kv_cache_;

@@ -46,7 +46,7 @@ class VisionLiteRtCompiledModelExecutor : public VisionExecutor {
   // VisionExecutorSettings.
   static absl::StatusOr<std::unique_ptr<VisionLiteRtCompiledModelExecutor>>
   Create(const VisionExecutorSettings& vision_executor_settings,
-         Environment& env);
+         litert::Environment& env);
 
   // Encodes the input image tensor into vision embeddings.
   // Args:
@@ -84,12 +84,12 @@ class VisionLiteRtCompiledModelExecutor : public VisionExecutor {
     //   A unique pointer to the VisionEncoder if successful, or an error status
     //   if failed.
     static absl::StatusOr<std::unique_ptr<VisionEncoder>> Create(
-        Environment& env, const Model* absl_nonnull model,
+        Environment& env, std::shared_ptr<const Model> model,
         const VisionExecutorSettings& vision_executor_settings);
 
     // Initialize the VisionEncoder, which will create the input and output
     // buffers for the vision encoder model.
-    absl::Status Initialize();
+    absl::Status Initialize(const Model& model);
 
     // Returns the CompiledModel for the vision encoder model.
     const CompiledModel& GetCompiledModel() const { return compiled_model_; }
@@ -121,11 +121,9 @@ class VisionLiteRtCompiledModelExecutor : public VisionExecutor {
     absl::Status ClearInputBuffers();
 
    private:
-    VisionEncoder(Environment& env, const Model* absl_nonnull model,
+    VisionEncoder(Environment& env,
                   const VisionExecutorSettings& vision_executor_settings)
-        : env_(env),
-          vision_executor_settings_(vision_executor_settings),
-          model_(*model) {
+        : env_(env), vision_executor_settings_(vision_executor_settings) {
       backend_ = vision_executor_settings.GetEncoderBackend();
     }
 
@@ -137,9 +135,6 @@ class VisionLiteRtCompiledModelExecutor : public VisionExecutor {
 
     // The backend to use for the vision encoder model.
     Backend backend_;
-
-    // The vision encoder model.
-    const Model& model_;
 
     // The vision encoder compiled model.
     CompiledModel compiled_model_;
@@ -166,11 +161,11 @@ class VisionLiteRtCompiledModelExecutor : public VisionExecutor {
     //   A unique pointer to the VisionAdapter if successful, or an error status
     //   if failed.
     static absl::StatusOr<std::unique_ptr<VisionAdapter>> Create(
-        Environment& env, const Model* absl_nonnull model,
+        Environment& env, std::shared_ptr<const Model> model,
         const VisionExecutorSettings& vision_executor_settings);
 
     // Initialize the VisionAdapter.
-    absl::Status Initialize();
+    absl::Status Initialize(const Model& model);
 
     // Returns the CompiledModel for the vision adapter model.
     const CompiledModel& GetCompiledModel() const { return compiled_model_; }
@@ -189,11 +184,9 @@ class VisionLiteRtCompiledModelExecutor : public VisionExecutor {
     }
 
    private:
-    VisionAdapter(Environment& env, const Model* absl_nonnull model,
+    VisionAdapter(Environment& env,
                   const VisionExecutorSettings& vision_executor_settings)
-        : env_(env),
-          vision_executor_settings_(vision_executor_settings),
-          model_(*model) {
+        : env_(env), vision_executor_settings_(vision_executor_settings) {
       backend_ = vision_executor_settings.GetAdapterBackend();
     }
 
@@ -205,9 +198,6 @@ class VisionLiteRtCompiledModelExecutor : public VisionExecutor {
 
     // The backend to use for the vision adapter model.
     Backend backend_;
-
-    // The vision adapter model.
-    const Model& model_;
 
     // The vision adapter compiled model.
     CompiledModel compiled_model_;

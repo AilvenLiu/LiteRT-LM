@@ -42,7 +42,7 @@ class ModelResourcesTask : public ModelResources {
   static absl::StatusOr<std::unique_ptr<ModelResources>> Create(
       std::unique_ptr<ModelAssetBundleResources> model_asset_bundle_resources);
 
-  absl::StatusOr<const litert::Model*> GetTFLiteModel(
+  absl::StatusOr<std::shared_ptr<const litert::Model>> GetTFLiteModel(
       ModelType model_type) override;
   absl::StatusOr<absl::string_view> GetTFLiteModelBuffer(
       ModelType model_type) override;
@@ -69,7 +69,9 @@ class ModelResourcesTask : public ModelResources {
       : model_asset_bundle_resources_(std::move(model_asset_bundle_resources)) {
   }
 
-  absl::flat_hash_map<ModelType, std::shared_ptr<litert::Model>> model_map_;
+  absl::flat_hash_map<ModelType, std::shared_ptr<const litert::Model>>
+      model_map_;
+
   std::unique_ptr<proto::LlmMetadata> llm_metadata_;
 
   // The model asset bundle resources produced by reading task bundle. Not null

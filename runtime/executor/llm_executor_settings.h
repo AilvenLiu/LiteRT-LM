@@ -229,6 +229,10 @@ struct AdvancedSettings {
   // If true, the executor enables speculative decoding.
   bool enable_speculative_decoding = false;
 
+  // If true, the executor releases the TFLite model from RAM after it has been
+  // compiled into a hardware-specific executable. This helps reduce peak memory
+  // usage.
+
   // If true, the executor disables delegate clustering. Can be useful for cases
   // where the default model delegate partitioning is not optimal.
   bool disable_delegate_clustering = false;

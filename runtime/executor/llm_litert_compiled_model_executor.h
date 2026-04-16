@@ -128,10 +128,12 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
     return llm_context_->processed_context().processed_tokens();
   }
 
+  void ReleaseModel() { model_.reset(); }
+
  protected:
   LlmLiteRtCompiledModelExecutorBase(
       LlmExecutorSettings executor_settings, Environment& env,
-      const Model* absl_nonnull model, CompiledModel compiled_model,
+      std::shared_ptr<const Model> model, CompiledModel compiled_model,
       absl::flat_hash_map<absl::string_view, TensorBuffer> decode_input_buffers,
       absl::flat_hash_map<absl::string_view, TensorBuffer>
           decode_output_buffers,
@@ -151,7 +153,7 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
       std::unique_ptr<LlmLiteRtMtpDrafter> mtp_drafter)
       : executor_settings_(std::move(executor_settings)),
         env_(env),
-        model_(*model),
+        model_(std::move(model)),
         compiled_model_(std::move(compiled_model)),
         decode_input_buffers_(std::move(decode_input_buffers)),
         decode_output_buffers_(std::move(decode_output_buffers)),
@@ -269,7 +271,7 @@ class LlmLiteRtCompiledModelExecutorBase : public LlmExecutor {
 
   LlmExecutorSettings executor_settings_;
   Environment& env_;
-  const Model& model_;
+  std::shared_ptr<const Model> model_;
   CompiledModel compiled_model_;
 
   absl::flat_hash_map<absl::string_view, TensorBuffer> decode_input_buffers_;
@@ -348,7 +350,7 @@ class LlmLiteRtCompiledModelExecutorStatic
  private:
   LlmLiteRtCompiledModelExecutorStatic(
       LlmExecutorSettings executor_settings, Environment& env,
-      const Model* absl_nonnull model, CompiledModel compiled_model,
+      std::shared_ptr<const Model> model, CompiledModel compiled_model,
       absl::flat_hash_map<absl::string_view, TensorBuffer> decode_input_buffers,
       absl::flat_hash_map<absl::string_view, TensorBuffer>
           decode_output_buffers,
@@ -370,9 +372,9 @@ class LlmLiteRtCompiledModelExecutorStatic
       LogitsDataType logits_data_type = LogitsDataType::FLOAT32,
       std::unique_ptr<LlmLiteRtMtpDrafter> mtp_drafter = nullptr)
       : LlmLiteRtCompiledModelExecutorBase(
-            std::move(executor_settings), env, model, std::move(compiled_model),
-            std::move(decode_input_buffers), std::move(decode_output_buffers),
-            std::move(input_kv_cache_buffers),
+            std::move(executor_settings), env, std::move(model),
+            std::move(compiled_model), std::move(decode_input_buffers),
+            std::move(decode_output_buffers), std::move(input_kv_cache_buffers),
             std::move(output_kv_cache_buffers),
             std::move(decode_input_kv_cache_buffers),
             std::move(decode_output_kv_cache_buffers), signatures,
@@ -409,7 +411,7 @@ class LlmLiteRtCompiledModelExecutorDynamic
  private:
   LlmLiteRtCompiledModelExecutorDynamic(
       LlmExecutorSettings executor_settings, Environment& env,
-      const Model* absl_nonnull model, CompiledModel compiled_model,
+      std::shared_ptr<const Model> model, CompiledModel compiled_model,
       absl::flat_hash_map<absl::string_view, TensorBuffer> decode_input_buffers,
       absl::flat_hash_map<absl::string_view, TensorBuffer>
           decode_output_buffers,
@@ -426,8 +428,9 @@ class LlmLiteRtCompiledModelExecutorDynamic
       LogitsDataType logits_data_type = LogitsDataType::FLOAT32,
       std::unique_ptr<LlmLiteRtMtpDrafter> mtp_drafter = nullptr)
       : LlmLiteRtCompiledModelExecutorBase(
-            std::move(executor_settings), env, model, std::move(compiled_model),
-            std::move(decode_input_buffers), std::move(decode_output_buffers),
+            std::move(executor_settings), env, std::move(model),
+            std::move(compiled_model), std::move(decode_input_buffers),
+            std::move(decode_output_buffers),
             /*input_kv_cache_buffers=*/{},
             /*output_kv_cache_buffers=*/{},
             /*decode_input_kv_cache_buffers=*/std::nullopt,
