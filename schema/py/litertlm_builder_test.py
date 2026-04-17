@@ -128,8 +128,8 @@ class LitertlmBuilderTest(parameterized.TestCase):
     )
     self.assertIn("Key: creation_timestamp, Value (String):", ss)
 
-  def test_preserve_existing_uuid(self):
-    """Tests that existing uuid is not overridden."""
+  def test_override_existing_uuid(self):
+    """Tests that existing uuid is overridden."""
     builder = litertlm_builder.LitertLmFileBuilder()
     custom_uuid = "my-custom-uuid-123"
     builder.add_system_metadata(
@@ -140,7 +140,29 @@ class LitertlmBuilderTest(parameterized.TestCase):
         )
     )
     ss = self._build_and_read_litertlm(builder)
-    self.assertIn(f"Key: uuid, Value (String): {custom_uuid}", ss)
+    self.assertNotIn(f"Key: uuid, Value (String): {custom_uuid}", ss)
+    self.assertIn("Key: uuid, Value (String):", ss)
+
+  def test_populate_system_metadata(self):
+    """Tests populate_system_metadata helper function."""
+    metadata = []
+    updated = litertlm_builder.populate_system_metadata(metadata)
+
+    keys = {m.key for m in updated}
+    self.assertIn("uuid", keys)
+    self.assertIn("creation_timestamp", keys)
+
+    custom_uuid = "my-custom-uuid"
+    metadata = [
+        litertlm_builder.Metadata(
+            key="uuid",
+            value=custom_uuid,
+            dtype=litertlm_builder.DType.STRING,
+        )
+    ]
+    updated = litertlm_builder.populate_system_metadata(metadata)
+    uuid_val = next(m.value for m in updated if m.key == "uuid")
+    self.assertNotEqual(uuid_val, custom_uuid)
 
   def test_add_system_metadata_duplicate_key(self):
     """Tests that adding system metadata with a duplicate key raises a ValueError."""
