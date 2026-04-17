@@ -692,6 +692,11 @@ absl::StatusOr<std::unique_ptr<Conversation>> Conversation::Clone() {
   return new_conversation;
 }
 
+absl::StatusOr<std::string> Conversation::RenderMessageIntoString(
+    const Message& message, OptionalArgs optional_args) {
+  return GetSingleTurnText(message, optional_args);
+}
+
 absl::StatusOr<std::string> Conversation::GetPrefillTextForMessages(
     absl::Span<const Message> old_messages,
     absl::Span<const Message> new_messages, const OptionalArgs& optional_args,

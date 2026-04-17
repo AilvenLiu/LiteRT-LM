@@ -207,6 +207,7 @@ internal object LiteRtLmJni {
     extraContextJsonString: String,
     enableConversationConstrainedDecoding: Boolean,
     filterChannelContentFromKvCache: Boolean,
+    overwritePromptTemplate: String?,
   ): Long
 
   /**
@@ -260,6 +261,20 @@ internal object LiteRtLmJni {
    * @throws LiteRtLmJniException if the underlying native method fails.
    */
   external fun nativeConversationGetBenchmarkInfo(conversationPointer: Long): BenchmarkInfo
+
+  /**
+   * Renders the message into a string for testing purposes.
+   *
+   * @param conversationPointer A pointer to the native conversation instance.
+   * @param messageJsonString The message in JSON string format.
+   * @param extraContextJsonString The extra context in JSON string format.
+   * @return The rendered message string.
+   */
+  external fun nativeConversationRenderMessageIntoString(
+    conversationPointer: Long,
+    messageJsonString: String,
+    extraContextJsonString: String,
+  ): String
 
   /**
    * Callback for the nativeSendMessageAsync.
