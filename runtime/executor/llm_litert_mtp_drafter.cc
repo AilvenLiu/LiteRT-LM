@@ -298,7 +298,7 @@ absl::Status LlmLiteRtMtpDrafter::PrepareDrafterInputBuffers(
   if (active_drafter_input_buffers_.contains("param_tensor")) {
     RETURN_IF_ERROR(FillSingleBufferCacheParamTensor(
         active_drafter_input_buffers_["param_tensor"], position,
-        /*update_length=*/0));
+        /*update_length=*/1));
   }
   return absl::OkStatus();
 }
