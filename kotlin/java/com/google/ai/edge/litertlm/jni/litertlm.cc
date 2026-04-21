@@ -31,6 +31,7 @@
 #include "absl/time/time.h"  // from @com_google_absl
 #include "nlohmann/json_fwd.hpp"  // from @nlohmann_json
 #include "litert/c/internal/litert_logging.h"  // from @litert
+#include "runtime/components/prompt_template.h"
 #include "runtime/conversation/conversation.h"
 #include "runtime/conversation/io_types.h"
 #include "runtime/engine/engine.h"
@@ -61,6 +62,7 @@
 
 namespace {
 using litert::lm::Backend;
+using litert::lm::Channel;
 using litert::lm::Conversation;
 using litert::lm::ConversationConfig;
 using litert::lm::Engine;
@@ -70,11 +72,11 @@ using litert::lm::InputAudio;
 using litert::lm::InputData;
 using litert::lm::InputImage;
 using litert::lm::InputText;
-
 using litert::lm::JsonPreface;
 using litert::lm::Message;
 using litert::lm::ModelAssets;
 using litert::lm::Preface;
+using litert::lm::PromptTemplate;
 using litert::lm::Responses;
 using litert::lm::SessionConfig;
 using litert::lm::proto::SamplerParameters;
@@ -809,7 +811,8 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateConversation)(
     jstring messages_json_string, jstring tools_description_json_string,
     jstring channels_json_string, jstring extra_context_json_string,
     jboolean enable_constrained_decoding,
-    jboolean filter_channel_content_from_kv_cache) {
+    jboolean filter_channel_content_from_kv_cache,
+    jstring overwrite_prompt_template) {
   Engine* engine = reinterpret_cast<Engine*>(engine_pointer);
 
   // Create a native SessionConfig
@@ -885,6 +888,19 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateConversation)(
       }
     }
     conversation_config_builder.SetChannels(channels);
+  }
+
+  // Set the overwrite prompt template, if provided.
+  if (overwrite_prompt_template != nullptr) {
+    const char* overwrite_prompt_template_chars =
+        env->GetStringUTFChars(overwrite_prompt_template, nullptr);
+    std::string overwrite_prompt_template_str(overwrite_prompt_template_chars);
+    env->ReleaseStringUTFChars(overwrite_prompt_template,
+                               overwrite_prompt_template_chars);
+    if (!overwrite_prompt_template_str.empty()) {
+      conversation_config_builder.SetOverwritePromptTemplate(
+          litert::lm::PromptTemplate(overwrite_prompt_template_str));
+    }
   }
 
   // Build the conversation
@@ -1047,6 +1063,37 @@ LITERTLM_JNIEXPORT void JNICALL JNI_METHOD(nativeConversationCancelProcess)(
   Conversation* conversation =
       reinterpret_cast<Conversation*>(conversation_pointer);
   conversation->CancelProcess();
+}
+
+LITERTLM_JNIEXPORT jstring JNICALL JNI_METHOD(
+    nativeConversationRenderMessageIntoString)(JNIEnv* env, jclass thiz,
+                                               jlong conversation_pointer,
+                                               jstring messageJSONString,
+                                               jstring extraContextJsonString) {
+  Conversation* conversation =
+      reinterpret_cast<Conversation*>(conversation_pointer);
+
+  const char* json_chars = env->GetStringUTFChars(messageJSONString, nullptr);
+  litert::lm::Message json_message = nlohmann::ordered_json::parse(json_chars);
+  env->ReleaseStringUTFChars(messageJSONString, json_chars);
+
+  litert::lm::OptionalArgs optional_args;
+  nlohmann::ordered_json extra_context =
+      GetExtraContextJson(env, extraContextJsonString);
+  if (!extra_context.is_null() && !extra_context.empty()) {
+    optional_args.extra_context = extra_context;
+  }
+
+  auto response = conversation->RenderMessageIntoString(
+      json_message, std::move(optional_args));
+  if (!response.ok()) {
+    ThrowLiteRtLmJniException(
+        env, "Failed to call nativeConversationRenderMessageIntoString: " +
+                 response.status().ToString());
+    return nullptr;
+  }
+
+  return NewStringStandardUTF(env, *response);
 }
 
 }  // extern "C"

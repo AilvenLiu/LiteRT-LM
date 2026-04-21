@@ -869,6 +869,29 @@ TEST_P(ConversationTest, SendSingleMessageWithChannel) {
               testing::ElementsAre(user_message, assistant_message));
 }
 
+TEST_P(ConversationTest, RenderMessageIntoString) {
+  // Set up mock Session.
+  auto mock_session = CreateMockSession();
+  auto mock_engine = CreateMockEngine(std::move(mock_session));
+
+  // Create Conversation.
+  ASSERT_OK_AND_ASSIGN(
+      auto conversation_config,
+      ConversationConfig::Builder()
+          .SetSessionConfig(session_config_)
+          .SetOverwritePromptTemplate(PromptTemplate(kTestJinjaPromptTemplate))
+          .Build(*mock_engine));
+  ASSERT_OK_AND_ASSIGN(auto conversation,
+                       Conversation::Create(*mock_engine, conversation_config));
+
+  Message user_message = {{"role", "user"}, {"content", "Hello world!"}};
+
+  ASSERT_OK_AND_ASSIGN(std::string rendered,
+                       conversation->RenderMessageIntoString(user_message, {}));
+
+  EXPECT_EQ(rendered, "<start_of_turn>user\nHello world!<end_of_turn>\n");
+}
+
 TEST_P(ConversationTest, SendSingleMessageWithChannelQwenThink) {
   // Set up mock Session.
   auto mock_session = CreateMockSession();

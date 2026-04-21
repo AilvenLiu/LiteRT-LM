@@ -525,6 +525,14 @@ class Conversation {
   // continue using the Conversation after cancellation.
   void CancelGroup(absl::string_view task_group_id);
 
+  // Renders the message into a string for testing and logging purposes.
+  //
+  // This function does not need to be called for actual message sending, as the
+  // `SendMessage` and `SendMessageAsync` functions will handle rendering
+  // internally.
+  absl::StatusOr<std::string> RenderMessageIntoString(
+      const Message& message, OptionalArgs optional_args);
+
  private:
   explicit Conversation(
       Engine& engine, std::unique_ptr<Engine::Session> session,

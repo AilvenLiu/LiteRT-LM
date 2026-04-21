@@ -82,6 +82,14 @@ object ExperimentalFlags {
    * affect any existing [Conversation] instances.
    */
   var filterChannelContentFromKvCache: Boolean = false
+
+  /**
+   * A prompt template to overwrite the default one.
+   *
+   * Note: This flag is read only when a new [Conversation] is created. Changing this value will not
+   * affect any existing [Conversation] instances.
+   */
+  var overwritePromptTemplate: String? = null
 }
 
 // Mark this annotation itself as requiring opt-in

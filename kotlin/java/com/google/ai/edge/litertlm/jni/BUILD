@@ -34,6 +34,7 @@ cc_binary(
         "@com_google_absl//absl/time",
         "@nlohmann_json//:json",
         "@litert//litert/c/internal:litert_logging",
+        "//runtime/components:prompt_template",
         "//runtime/conversation",
         "//runtime/conversation:io_types",
         "//runtime/engine:engine_factory",
