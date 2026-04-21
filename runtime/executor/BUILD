@@ -387,13 +387,16 @@ cc_library(
     name = "llm_litert_compiled_model_executor_factory",
     srcs = ["llm_litert_compiled_model_executor_factory.cc"],
     hdrs = ["llm_litert_compiled_model_executor_factory.h"],
+    defines = select({
+        "@platforms//os:ios": ["LITERT_DISABLE_NPU"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":executor_settings_base",
         ":litert_compiled_model_executor_utils",
         ":llm_executor",
         ":llm_executor_settings",
         ":llm_litert_compiled_model_executor",
-        ":llm_litert_npu_compiled_model_executor",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
@@ -402,6 +405,9 @@ cc_library(
         "//runtime/components:model_resources",
         "//runtime/util:litert_status_util",
     ] + select({
+        "@platforms//os:ios": [],
+        "//conditions:default": [":llm_litert_npu_compiled_model_executor"],
+    }) + select({
         "@litert//litert:litert_link_capi_so": [
             "@litert//litert/cc:litert_api_with_dynamic_runtime",
         ],
