@@ -61,6 +61,15 @@ using SessionConfigPtr =
 using ConversationConfigPtr =
     std::unique_ptr<LiteRtLmConversationConfig,
                     decltype(&litert_lm_conversation_config_delete)>;
+using TokenizeResultPtr =
+    std::unique_ptr<LiteRtLmTokenizeResult,
+                    decltype(&litert_lm_tokenize_result_delete)>;
+using DetokenizeResultPtr =
+    std::unique_ptr<LiteRtLmDetokenizeResult,
+                    decltype(&litert_lm_detokenize_result_delete)>;
+using TokenSequencesPtr =
+    std::unique_ptr<LiteRtLmTokenSequences,
+                    decltype(&litert_lm_token_sequences_delete)>;
 
 TEST(EngineCTest, CreateSettingsWithNoVisionAndAudioBackend) {
   const std::string task_path = "test_model_path_1";
@@ -579,6 +588,57 @@ TEST(EngineCTest, CreateConversationConfigWithNoSystemMessage) {
   const auto& preface = std::get<litert::lm::JsonPreface>(
       conversation_config->config->GetPreface());
   EXPECT_EQ(preface.messages, nullptr);
+}
+
+TEST(EngineCTest, TokenizerTest) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm.litertlm");
+  EngineSettingsPtr settings(litert_lm_engine_settings_create(
+                                 task_path.c_str(), "cpu", nullptr, nullptr),
+                             &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  const char* text = "hello";
+  TokenizeResultPtr tokenize_result(
+      litert_lm_engine_tokenize(engine.get(), text),
+      &litert_lm_tokenize_result_delete);
+  ASSERT_NE(tokenize_result, nullptr);
+  size_t num_tokens =
+      litert_lm_tokenize_result_get_num_tokens(tokenize_result.get());
+  EXPECT_GT(num_tokens, 0);
+
+  const int* tokens =
+      litert_lm_tokenize_result_get_tokens(tokenize_result.get());
+  DetokenizeResultPtr detokenize_result(
+      litert_lm_engine_detokenize(engine.get(), tokens, num_tokens),
+      &litert_lm_detokenize_result_delete);
+  ASSERT_NE(detokenize_result, nullptr);
+  EXPECT_STREQ(litert_lm_detokenize_result_get_string(detokenize_result.get()),
+               text);
+
+  int bos_token_id;
+  (void)litert_lm_engine_get_bos_token_id(engine.get(), &bos_token_id);
+
+  TokenSequencesPtr eos_sequences(
+      litert_lm_engine_get_eos_token_ids(engine.get()),
+      &litert_lm_token_sequences_delete);
+  if (eos_sequences != nullptr) {
+    size_t num_sequences =
+        litert_lm_token_sequences_get_num_sequences(eos_sequences.get());
+    for (size_t i = 0; i < num_sequences; ++i) {
+      const int* eos_tokens;
+      size_t num_eos_tokens;
+      EXPECT_EQ(litert_lm_token_sequences_get_sequence_at(
+                    eos_sequences.get(), i, &eos_tokens, &num_eos_tokens),
+                0);
+      EXPECT_NE(eos_tokens, nullptr);
+      EXPECT_GT(num_eos_tokens, 0);
+    }
+  }
 }
 
 TEST(EngineCTest, GenerateContent) {

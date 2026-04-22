@@ -56,6 +56,30 @@ typedef struct LiteRtLmConversation LiteRtLmConversation;
 // Opaque pointer for a JSON response.
 typedef struct LiteRtLmJsonResponse LiteRtLmJsonResponse;
 
+// Opaque pointer for a detokenize result.
+// Use `litert_lm_detokenize_result_delete` to free memory.
+typedef struct LiteRtLmDetokenizeResult LiteRtLmDetokenizeResult;
+
+// Opaque pointer for a tokenize result.
+// Use `litert_lm_tokenize_result_delete` to free memory.
+typedef struct LiteRtLmTokenizeResult LiteRtLmTokenizeResult;
+
+// Opaque pointer for LiteRT LM Token Sequences.
+// This represents a collection of token sequences, typically used for model
+// stop conditions (EOS). It is a 2D structure where:
+// - The 1st dimension is the list of different stop conditions (e.g.,
+//   the model might stop on either a "<|endoftext|>" or a "\nUser:").
+// - The 2nd dimension is the actual sequence of token IDs for one such
+//   condition (e.g., "\nUser:" might be represented by multiple tokens).
+//
+// Example: A model might be configured with two stop conditions:
+// 1. A single token ID: [2] (e.g., "<|endoftext|>")
+// 2. A multi-token sequence: [108, 109, 110] (e.g., "<end_of_turn>")
+// In this case, the collection contains two sequences of varying lengths.
+//
+// Use `litert_lm_token_sequences_delete` to free memory.
+typedef struct LiteRtLmTokenSequences LiteRtLmTokenSequences;
+
 // Opaque pointer for LiteRT LM Session Config.
 typedef struct LiteRtLmSessionConfig LiteRtLmSessionConfig;
 
@@ -512,6 +536,119 @@ void litert_lm_conversation_cancel_process(LiteRtLmConversation* conversation);
 LITERT_LM_C_API_EXPORT
 LiteRtLmBenchmarkInfo* litert_lm_conversation_get_benchmark_info(
     LiteRtLmConversation* conversation);
+
+// Tokenizes text using the engine's tokenizer.
+//
+// @param engine The engine instance.
+// @param text The UTF-8 string to tokenize.
+// @return A pointer to the tokenize result, or NULL on failure.
+//   The caller is responsible for deleting the result using
+//   `litert_lm_tokenize_result_delete`.
+LITERT_LM_C_API_EXPORT
+LiteRtLmTokenizeResult* litert_lm_engine_tokenize(LiteRtLmEngine* engine,
+                                                  const char* text);
+
+// Destroys a LiteRT LM Tokenize Result.
+//
+// @param result The tokenize result to destroy.
+LITERT_LM_C_API_EXPORT
+void litert_lm_tokenize_result_delete(LiteRtLmTokenizeResult* result);
+
+// Returns the token ids from a tokenize result.
+//
+// @param result The tokenize result.
+// @return A pointer to the internal array of token ids. The returned pointer
+//   is valid only for the lifetime of the `result` object.
+LITERT_LM_C_API_EXPORT
+const int* litert_lm_tokenize_result_get_tokens(
+    const LiteRtLmTokenizeResult* result);
+
+// Returns the number of token ids from a tokenize result.
+//
+// @param result The tokenize result.
+// @return The number of token ids.
+LITERT_LM_C_API_EXPORT
+size_t litert_lm_tokenize_result_get_num_tokens(
+    const LiteRtLmTokenizeResult* result);
+
+// Detokenizes token ids using the engine's tokenizer.
+//
+// @param engine The engine instance.
+// @param tokens An array of token ids to detokenize.
+// @param num_tokens The number of token ids in the array.
+// @return A pointer to the detokenize result, or NULL on failure.
+//   The caller is responsible for deleting the result using
+//   `litert_lm_detokenize_result_delete`.
+LITERT_LM_C_API_EXPORT
+LiteRtLmDetokenizeResult* litert_lm_engine_detokenize(LiteRtLmEngine* engine,
+                                                      const int* tokens,
+                                                      size_t num_tokens);
+
+// Destroys a LiteRT LM Detokenize Result.
+//
+// @param result The detokenize result to destroy.
+LITERT_LM_C_API_EXPORT
+void litert_lm_detokenize_result_delete(LiteRtLmDetokenizeResult* result);
+
+// Returns the string from a detokenize result.
+//
+// @param result The detokenize result.
+// @return The detokenized UTF-8 string. The returned string is owned by the
+//   `result` object and is valid only for its lifetime.
+LITERT_LM_C_API_EXPORT
+const char* litert_lm_detokenize_result_get_string(
+    const LiteRtLmDetokenizeResult* result);
+
+// Returns the configured BOS (Beginning Of Sequence) token id, if any.
+//
+// @param engine The engine instance.
+// @param out_token_id A pointer to receive the BOS token id.
+// @return 0 on success. Returns non-zero if no BOS token is configured.
+LITERT_LM_C_API_EXPORT
+int litert_lm_engine_get_bos_token_id(LiteRtLmEngine* engine,
+                                      int* out_token_id);
+
+// Returns the configured EOS (End Of Sequence) / stop token sequences.
+//
+// These sequences represent the conditions under which the model will stop
+// generating text. Generation should terminate if any of these multi-token
+// sequences are matched.
+//
+// @param engine The engine instance.
+// @return A pointer to the token sequences, or NULL if none configured.
+//   The caller is responsible for deleting the result using
+//   `litert_lm_token_sequences_delete`.
+LITERT_LM_C_API_EXPORT
+LiteRtLmTokenSequences* litert_lm_engine_get_eos_token_ids(
+    LiteRtLmEngine* engine);
+
+// Destroys a LiteRT LM Token Sequences object.
+//
+// @param sequences The sequences object to destroy.
+LITERT_LM_C_API_EXPORT
+void litert_lm_token_sequences_delete(LiteRtLmTokenSequences* sequences);
+
+// Returns the number of token sequences.
+//
+// @param sequences The sequences object.
+// @return The number of sequences.
+LITERT_LM_C_API_EXPORT
+size_t litert_lm_token_sequences_get_num_sequences(
+    const LiteRtLmTokenSequences* sequences);
+
+// Returns the token sequence at a given index.
+//
+// @param sequences The sequences object.
+// @param index The index of the sequence.
+// @param out_tokens A pointer to receive the array of token ids.
+//   The received pointer is valid only for the lifetime of the `sequences`
+//   object.
+// @param out_num_tokens A pointer to receive the number of token ids.
+// @return 0 on success. Returns non-zero if index is out of bounds.
+LITERT_LM_C_API_EXPORT
+int litert_lm_token_sequences_get_sequence_at(
+    const LiteRtLmTokenSequences* sequences, size_t index,
+    const int** out_tokens, size_t* out_num_tokens);
 
 #ifdef __cplusplus
 }  // extern "C"
