@@ -149,15 +149,15 @@ struct LiteRtLmConversationConfig {
 
 extern "C" {
 
-SamplerParameters::Type ToSamplerParametersType(Type type) {
+SamplerParameters::Type ToSamplerParametersType(LiteRtLmSamplerType type) {
   switch (type) {
-    case kTypeUnspecified:
+    case kLiteRtLmSamplerTypeUnspecified:
       return SamplerParameters::TYPE_UNSPECIFIED;
-    case kTopK:
+    case kLiteRtLmSamplerTypeTopK:
       return SamplerParameters::TOP_K;
-    case kTopP:
+    case kLiteRtLmSamplerTypeTopP:
       return SamplerParameters::TOP_P;
-    case kGreedy:
+    case kLiteRtLmSamplerTypeGreedy:
       return SamplerParameters::GREEDY;
   }
   return SamplerParameters::TYPE_UNSPECIFIED;
@@ -453,9 +453,9 @@ LiteRtLmSession* litert_lm_engine_create_session(
 
 void litert_lm_session_delete(LiteRtLmSession* session) { delete session; }
 
-LiteRtLmResponses* litert_lm_session_generate_content(LiteRtLmSession* session,
-                                                      const InputData* inputs,
-                                                      size_t num_inputs) {
+LiteRtLmResponses* litert_lm_session_generate_content(
+    LiteRtLmSession* session, const LiteRtLmInputData* inputs,
+    size_t num_inputs) {
   if (!session || !session->session) {
     return nullptr;
   }
@@ -463,22 +463,22 @@ LiteRtLmResponses* litert_lm_session_generate_content(LiteRtLmSession* session,
   engine_inputs.reserve(num_inputs);
   for (size_t i = 0; i < num_inputs; ++i) {
     switch (inputs[i].type) {
-      case kInputText:
+      case kLiteRtLmInputDataTypeText:
         engine_inputs.emplace_back(InputText(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImage:
+      case kLiteRtLmInputDataTypeImage:
         engine_inputs.emplace_back(litert::lm::InputImage(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImageEnd:
+      case kLiteRtLmInputDataTypeImageEnd:
         engine_inputs.emplace_back(litert::lm::InputImageEnd());
         break;
-      case kInputAudio:
+      case kLiteRtLmInputDataTypeAudio:
         engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputAudioEnd:
+      case kLiteRtLmInputDataTypeAudioEnd:
         engine_inputs.emplace_back(litert::lm::InputAudioEnd());
         break;
     }
@@ -494,7 +494,7 @@ LiteRtLmResponses* litert_lm_session_generate_content(LiteRtLmSession* session,
 }
 
 int litert_lm_session_generate_content_stream(LiteRtLmSession* session,
-                                              const InputData* inputs,
+                                              const LiteRtLmInputData* inputs,
                                               size_t num_inputs,
                                               LiteRtLmStreamCallback callback,
                                               void* callback_data) {
@@ -505,22 +505,22 @@ int litert_lm_session_generate_content_stream(LiteRtLmSession* session,
   engine_inputs.reserve(num_inputs);
   for (size_t i = 0; i < num_inputs; ++i) {
     switch (inputs[i].type) {
-      case kInputText:
+      case kLiteRtLmInputDataTypeText:
         engine_inputs.emplace_back(litert::lm::InputText(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImage:
+      case kLiteRtLmInputDataTypeImage:
         engine_inputs.emplace_back(litert::lm::InputImage(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImageEnd:
+      case kLiteRtLmInputDataTypeImageEnd:
         engine_inputs.emplace_back(litert::lm::InputImageEnd());
         break;
-      case kInputAudio:
+      case kLiteRtLmInputDataTypeAudio:
         engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputAudioEnd:
+      case kLiteRtLmInputDataTypeAudioEnd:
         engine_inputs.emplace_back(litert::lm::InputAudioEnd());
         break;
     }
