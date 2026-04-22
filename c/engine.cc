@@ -140,12 +140,18 @@ struct LiteRtLmJsonResponse {
   std::string json_string;
 };
 
+// TODO: b/483172229 - Migrate to use SessionConfig instead of unique_ptr to
+// SessionConfig for consistency and efficiency.
 struct LiteRtLmSessionConfig {
   std::unique_ptr<SessionConfig> config;
 };
 
 struct LiteRtLmConversationConfig {
-  std::unique_ptr<ConversationConfig> config;
+  std::optional<SessionConfig> session_config;
+  std::string system_message_json;
+  std::string tools_json;
+  std::string messages_json;
+  bool enable_constrained_decoding = false;
 };
 
 extern "C" {
@@ -154,15 +160,15 @@ void litert_lm_set_min_log_level(int level) {
   litert::lm::SetMinLogSeverity(static_cast<litert::lm::LogSeverity>(level));
 }
 
-SamplerParameters::Type ToSamplerParametersType(Type type) {
+SamplerParameters::Type ToSamplerParametersType(LiteRtLmSamplerType type) {
   switch (type) {
-    case kTypeUnspecified:
+    case kLiteRtLmSamplerTypeUnspecified:
       return SamplerParameters::TYPE_UNSPECIFIED;
-    case kTopK:
+    case kLiteRtLmSamplerTypeTopK:
       return SamplerParameters::TOP_K;
-    case kTopP:
+    case kLiteRtLmSamplerTypeTopP:
       return SamplerParameters::TOP_P;
-    case kGreedy:
+    case kLiteRtLmSamplerTypeGreedy:
       return SamplerParameters::GREEDY;
   }
   return SamplerParameters::TYPE_UNSPECIFIED;
@@ -201,85 +207,44 @@ void litert_lm_session_config_delete(LiteRtLmSessionConfig* config) {
   delete config;
 }
 
-LiteRtLmConversationConfig* litert_lm_conversation_config_create(
-    LiteRtLmEngine* engine, const LiteRtLmSessionConfig* session_config,
-    const char* system_message_json, const char* tools_json,
-    const char* messages_json, bool enable_constrained_decoding) {
-  if (!engine || !engine->engine) {
-    return nullptr;
+LiteRtLmConversationConfig* litert_lm_conversation_config_create() {
+  return new LiteRtLmConversationConfig;
+}
+
+void litert_lm_conversation_config_set_session_config(
+    LiteRtLmConversationConfig* config,
+    const LiteRtLmSessionConfig* session_config) {
+  if (config && session_config && session_config->config) {
+    config->session_config = *session_config->config;
   }
+}
 
-  litert::lm::JsonPreface json_preface;
-  if (system_message_json) {
-    nlohmann::ordered_json system_message;
-    system_message["role"] = "system";
-    auto content =
-        nlohmann::ordered_json::parse(system_message_json, nullptr, false);
-    if (content.is_discarded()) {
-      // If JSON parsing fails, assume it's a plain string.
-      system_message["content"] = system_message_json;
-    } else {
-      system_message["content"] = content;
-    }
-    json_preface.messages = nlohmann::ordered_json::array({system_message});
+void litert_lm_conversation_config_set_system_message(
+    LiteRtLmConversationConfig* config, const char* system_message_json) {
+  if (config && system_message_json) {
+    config->system_message_json = system_message_json;
   }
+}
 
-  if (messages_json) {
-    auto messages =
-        nlohmann::ordered_json::parse(messages_json, nullptr, false);
-    if (messages.is_discarded()) {
-      ABSL_LOG(ERROR) << "Failed to parse messages JSON.";
-    } else if (!messages.is_array()) {
-      ABSL_LOG(ERROR) << "Messages JSON is not an array.";
-    } else {
-      if (json_preface.messages.is_array()) {
-        json_preface.messages.insert(json_preface.messages.end(),
-                                     messages.begin(), messages.end());
-      } else {
-        json_preface.messages = std::move(messages);
-      }
-    }
+void litert_lm_conversation_config_set_tools(LiteRtLmConversationConfig* config,
+                                             const char* tools_json) {
+  if (config && tools_json) {
+    config->tools_json = tools_json;
   }
+}
 
-  std::unique_ptr<SessionConfig> default_session_config;
-  const SessionConfig* config_to_use;
-
-  if (session_config && session_config->config) {
-    config_to_use = session_config->config.get();
-  } else {
-    default_session_config =
-        std::make_unique<SessionConfig>(SessionConfig::CreateDefault());
-    config_to_use = default_session_config.get();
+void litert_lm_conversation_config_set_messages(
+    LiteRtLmConversationConfig* config, const char* messages_json) {
+  if (config && messages_json) {
+    config->messages_json = messages_json;
   }
+}
 
-  if (tools_json) {
-    auto tool_json_parsed =
-        nlohmann::ordered_json::parse(tools_json, nullptr, false);
-    if (!tool_json_parsed.is_discarded() && tool_json_parsed.is_array()) {
-      json_preface.tools = tool_json_parsed;
-    } else {
-      ABSL_LOG(ERROR) << "Failed to parse tools JSON or not an array: "
-                      << tools_json;
-    }
+void litert_lm_conversation_config_set_enable_constrained_decoding(
+    LiteRtLmConversationConfig* config, bool enable_constrained_decoding) {
+  if (config) {
+    config->enable_constrained_decoding = enable_constrained_decoding;
   }
-
-  auto conversation_config =
-      litert::lm::ConversationConfig::Builder()
-          .SetSessionConfig(*config_to_use)
-          .SetPreface(json_preface)
-          .SetEnableConstrainedDecoding(enable_constrained_decoding)
-          .Build(*engine->engine);
-
-  if (!conversation_config.ok()) {
-    ABSL_LOG(ERROR) << "Failed to create conversation config: "
-                    << conversation_config.status();
-    return nullptr;
-  }
-
-  auto* c_config = new LiteRtLmConversationConfig;
-  c_config->config =
-      std::make_unique<ConversationConfig>(*std::move(conversation_config));
-  return c_config;
 }
 
 void litert_lm_conversation_config_delete(LiteRtLmConversationConfig* config) {
@@ -458,9 +423,9 @@ LiteRtLmSession* litert_lm_engine_create_session(
 
 void litert_lm_session_delete(LiteRtLmSession* session) { delete session; }
 
-LiteRtLmResponses* litert_lm_session_generate_content(LiteRtLmSession* session,
-                                                      const InputData* inputs,
-                                                      size_t num_inputs) {
+LiteRtLmResponses* litert_lm_session_generate_content(
+    LiteRtLmSession* session, const LiteRtLmInputData* inputs,
+    size_t num_inputs) {
   if (!session || !session->session) {
     return nullptr;
   }
@@ -468,22 +433,22 @@ LiteRtLmResponses* litert_lm_session_generate_content(LiteRtLmSession* session,
   engine_inputs.reserve(num_inputs);
   for (size_t i = 0; i < num_inputs; ++i) {
     switch (inputs[i].type) {
-      case kInputText:
+      case kLiteRtLmInputDataTypeText:
         engine_inputs.emplace_back(InputText(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImage:
+      case kLiteRtLmInputDataTypeImage:
         engine_inputs.emplace_back(litert::lm::InputImage(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImageEnd:
+      case kLiteRtLmInputDataTypeImageEnd:
         engine_inputs.emplace_back(litert::lm::InputImageEnd());
         break;
-      case kInputAudio:
+      case kLiteRtLmInputDataTypeAudio:
         engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputAudioEnd:
+      case kLiteRtLmInputDataTypeAudioEnd:
         engine_inputs.emplace_back(litert::lm::InputAudioEnd());
         break;
     }
@@ -499,7 +464,7 @@ LiteRtLmResponses* litert_lm_session_generate_content(LiteRtLmSession* session,
 }
 
 int litert_lm_session_generate_content_stream(LiteRtLmSession* session,
-                                              const InputData* inputs,
+                                              const LiteRtLmInputData* inputs,
                                               size_t num_inputs,
                                               LiteRtLmStreamCallback callback,
                                               void* callback_data) {
@@ -510,22 +475,22 @@ int litert_lm_session_generate_content_stream(LiteRtLmSession* session,
   engine_inputs.reserve(num_inputs);
   for (size_t i = 0; i < num_inputs; ++i) {
     switch (inputs[i].type) {
-      case kInputText:
+      case kLiteRtLmInputDataTypeText:
         engine_inputs.emplace_back(litert::lm::InputText(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImage:
+      case kLiteRtLmInputDataTypeImage:
         engine_inputs.emplace_back(litert::lm::InputImage(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputImageEnd:
+      case kLiteRtLmInputDataTypeImageEnd:
         engine_inputs.emplace_back(litert::lm::InputImageEnd());
         break;
-      case kInputAudio:
+      case kLiteRtLmInputDataTypeAudio:
         engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
             static_cast<const char*>(inputs[i].data), inputs[i].size)));
         break;
-      case kInputAudioEnd:
+      case kLiteRtLmInputDataTypeAudioEnd:
         engine_inputs.emplace_back(litert::lm::InputAudioEnd());
         break;
     }
@@ -661,15 +626,69 @@ double litert_lm_benchmark_info_get_decode_tokens_per_sec_at(
 }
 
 LiteRtLmConversation* litert_lm_conversation_create(
-    LiteRtLmEngine* engine, LiteRtLmConversationConfig* conversation_config) {
+    LiteRtLmEngine* engine, LiteRtLmConversationConfig* c_config) {
   if (!engine || !engine->engine) {
     return nullptr;
   }
 
   absl::StatusOr<std::unique_ptr<Conversation>> conversation;
-  if (conversation_config && conversation_config->config) {
-    conversation =
-        Conversation::Create(*engine->engine, *conversation_config->config);
+  if (c_config) {
+    litert::lm::JsonPreface json_preface;
+    if (!c_config->system_message_json.empty()) {
+      nlohmann::ordered_json system_message;
+      system_message["role"] = "system";
+      auto content = nlohmann::ordered_json::parse(
+          c_config->system_message_json, nullptr, false);
+      if (content.is_discarded()) {
+        system_message["content"] = c_config->system_message_json;
+      } else {
+        system_message["content"] = content;
+      }
+      json_preface.messages = nlohmann::ordered_json::array({system_message});
+    }
+
+    if (!c_config->messages_json.empty()) {
+      auto messages = nlohmann::ordered_json::parse(c_config->messages_json,
+                                                    nullptr, false);
+      if (messages.is_discarded()) {
+        ABSL_LOG(ERROR) << "Failed to parse messages JSON.";
+      } else if (!messages.is_array()) {
+        ABSL_LOG(ERROR) << "Messages JSON is not an array.";
+      } else {
+        if (json_preface.messages.is_array()) {
+          json_preface.messages.insert(json_preface.messages.end(),
+                                       messages.begin(), messages.end());
+        } else {
+          json_preface.messages = std::move(messages);
+        }
+      }
+    }
+
+    if (!c_config->tools_json.empty()) {
+      auto tool_json_parsed =
+          nlohmann::ordered_json::parse(c_config->tools_json, nullptr, false);
+      if (!tool_json_parsed.is_discarded() && tool_json_parsed.is_array()) {
+        json_preface.tools = tool_json_parsed;
+      } else {
+        ABSL_LOG(ERROR) << "Failed to parse tools JSON or not an array: "
+                        << c_config->tools_json;
+      }
+    }
+
+    auto builder = litert::lm::ConversationConfig::Builder();
+    if (c_config->session_config) {
+      builder.SetSessionConfig(*c_config->session_config);
+    }
+    builder.SetPreface(json_preface);
+    builder.SetEnableConstrainedDecoding(c_config->enable_constrained_decoding);
+    auto config = builder.Build(*engine->engine);
+
+    if (!config.ok()) {
+      ABSL_LOG(ERROR) << "Failed to create conversation config: "
+                      << config.status();
+      return nullptr;
+    }
+    conversation = Conversation::Create(*engine->engine, *config);
   } else {
     auto default_conversation_config =
         ConversationConfig::CreateDefault(*engine->engine);
