@@ -242,6 +242,14 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_engine_settings_set_num_decode_tokens(
     LiteRtLmEngineSettings* settings, int num_decode_tokens);
 
+// Sets whether to enable speculative decoding.
+//
+// @param settings The engine settings.
+// @param enable_speculative_decoding Whether to enable speculative decoding.
+LITERT_LM_C_API_EXPORT
+void litert_lm_engine_settings_set_enable_speculative_decoding(
+    LiteRtLmEngineSettings* settings, bool enable_speculative_decoding);
+
 // Creates a LiteRT LM Engine from the given settings. The caller is responsible
 // for destroying the engine using `litert_lm_engine_delete`.
 //

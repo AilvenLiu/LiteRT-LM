@@ -391,6 +391,17 @@ void litert_lm_engine_settings_set_num_decode_tokens(
   }
 }
 
+void litert_lm_engine_settings_set_enable_speculative_decoding(
+    LiteRtLmEngineSettings* settings, bool enable_speculative_decoding) {
+  if (settings && settings->settings) {
+    auto& main_settings = settings->settings->GetMutableMainExecutorSettings();
+    auto advanced_settings = main_settings.GetAdvancedSettings().value_or(
+        litert::lm::AdvancedSettings());
+    advanced_settings.enable_speculative_decoding = enable_speculative_decoding;
+    main_settings.SetAdvancedSettings(advanced_settings);
+  }
+}
+
 void litert_lm_engine_settings_set_activation_data_type(
     LiteRtLmEngineSettings* settings, int activation_data_type_int) {
   if (settings && settings->settings) {
