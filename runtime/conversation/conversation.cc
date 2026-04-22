@@ -409,6 +409,11 @@ absl::StatusOr<Message> Conversation::SendMessage(const Message& message,
     return status;
   }
 
+  // Trigger tasks to run in the execution manager. Necessary for the serial
+  // executor, which lazily runs tasks only when they're waited on.
+  // This should not slow down the threaded execution manager since it will
+  // need to wait for all the session's tasks to complete anyway.
+  RETURN_IF_ERROR(session_->WaitUntilDone());
   done.WaitForNotification();
 
   if (!error_status.ok()) {

@@ -430,8 +430,8 @@ absl::Status SerialExecutionManager::FinishTask(
     TaskId task_id, absl::StatusOr<Responses> responses,
     absl::AnyInvocable<void(absl::StatusOr<Responses>)> absl_nonnull callback) {
   auto invoke_callback_and_return = [&](absl::Status status) -> absl::Status {
-    callback(status);
     RETURN_IF_ERROR(UpdateTaskState(task_id, TaskState::kFailed));
+    callback(status);
     return status;
   };
 
@@ -475,8 +475,8 @@ absl::Status SerialExecutionManager::FinishTask(
 
   TaskState next_task_state =
       responses.ok() ? responses->GetTaskState() : TaskState::kFailed;
-  callback(std::move(responses));
   RETURN_IF_ERROR(UpdateTaskState(task_id, next_task_state));
+  callback(std::move(responses));
 
   return absl::OkStatus();
 }
