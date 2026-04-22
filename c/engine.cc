@@ -38,7 +38,9 @@
 #include "runtime/engine/io_types.h"
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/llm_executor_settings.h"
+#include "runtime/proto/llm_metadata.pb.h"
 #include "runtime/proto/sampler_params.pb.h"
+#include "runtime/proto/token.pb.h"
 #include "runtime/util/logging.h"
 
 namespace {
@@ -97,6 +99,35 @@ litert::lm::OptionalArgs CreateOptionalArgs(const char* extra_context) {
   return optional_args;
 }
 
+std::vector<litert::lm::InputData> ToEngineInputData(const InputData* inputs,
+                                                     size_t num_inputs) {
+  std::vector<litert::lm::InputData> engine_inputs;
+  engine_inputs.reserve(num_inputs);
+  for (size_t i = 0; i < num_inputs; ++i) {
+    switch (inputs[i].type) {
+      case kInputText:
+        engine_inputs.emplace_back(litert::lm::InputText(std::string(
+            static_cast<const char*>(inputs[i].data), inputs[i].size)));
+        break;
+      case kInputImage:
+        engine_inputs.emplace_back(litert::lm::InputImage(std::string(
+            static_cast<const char*>(inputs[i].data), inputs[i].size)));
+        break;
+      case kInputImageEnd:
+        engine_inputs.emplace_back(litert::lm::InputImageEnd());
+        break;
+      case kInputAudio:
+        engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
+            static_cast<const char*>(inputs[i].data), inputs[i].size)));
+        break;
+      case kInputAudioEnd:
+        engine_inputs.emplace_back(litert::lm::InputAudioEnd());
+        break;
+    }
+  }
+  return engine_inputs;
+}
+
 }  // namespace
 
 using ::litert::lm::Conversation;
@@ -146,6 +177,18 @@ struct LiteRtLmSessionConfig {
 
 struct LiteRtLmConversationConfig {
   std::unique_ptr<ConversationConfig> config;
+};
+
+struct LiteRtLmDetokenizeResult {
+  std::string text;
+};
+
+struct LiteRtLmTokenizeResult {
+  std::vector<int> tokens;
+};
+
+struct LiteRtLmTokenSequences {
+  std::vector<std::vector<int>> sequences;
 };
 
 extern "C" {
@@ -458,36 +501,67 @@ LiteRtLmSession* litert_lm_engine_create_session(
 
 void litert_lm_session_delete(LiteRtLmSession* session) { delete session; }
 
+LiteRtLmResponses* litert_lm_session_run_text_scoring(
+    LiteRtLmSession* session, const char** target_text, size_t num_targets,
+    bool store_token_lengths) {
+  if (!session || !session->session || !target_text || num_targets == 0) {
+    return nullptr;
+  }
+  std::vector<absl::string_view> target_text_views;
+  target_text_views.reserve(num_targets);
+  for (size_t i = 0; i < num_targets; ++i) {
+    target_text_views.push_back(target_text[i]);
+  }
+  auto responses =
+      session->session->RunTextScoring(target_text_views, store_token_lengths);
+  if (!responses.ok()) {
+    ABSL_LOG(ERROR) << "Failed to run text scoring: " << responses.status();
+    return nullptr;
+  }
+  auto* c_responses = new LiteRtLmResponses{std::move(*responses)};
+  if (c_responses->responses.GetTexts().empty()) {
+    auto& mutable_texts = c_responses->responses.GetMutableTexts();
+    mutable_texts.reserve(num_targets);
+    for (size_t i = 0; i < num_targets; ++i) {
+      mutable_texts.emplace_back(target_text[i]);
+    }
+  }
+  return c_responses;
+}
+
+int litert_lm_session_run_prefill(LiteRtLmSession* session,
+                                  const InputData* inputs, size_t num_inputs) {
+  if (!session || !session->session || !inputs || num_inputs == 0) {
+    return -1;
+  }
+  auto engine_inputs = ToEngineInputData(inputs, num_inputs);
+  auto status = session->session->RunPrefill(engine_inputs);
+  if (!status.ok()) {
+    ABSL_LOG(ERROR) << "Failed to run prefill: " << status;
+    return -1;
+  }
+  return 0;
+}
+
+LiteRtLmResponses* litert_lm_session_run_decode(LiteRtLmSession* session) {
+  if (!session || !session->session) {
+    return nullptr;
+  }
+  auto responses = session->session->RunDecode();
+  if (!responses.ok()) {
+    ABSL_LOG(ERROR) << "Failed to run decode: " << responses.status();
+    return nullptr;
+  }
+  return new LiteRtLmResponses{std::move(*responses)};
+}
+
 LiteRtLmResponses* litert_lm_session_generate_content(LiteRtLmSession* session,
                                                       const InputData* inputs,
                                                       size_t num_inputs) {
   if (!session || !session->session) {
     return nullptr;
   }
-  std::vector<litert::lm::InputData> engine_inputs;
-  engine_inputs.reserve(num_inputs);
-  for (size_t i = 0; i < num_inputs; ++i) {
-    switch (inputs[i].type) {
-      case kInputText:
-        engine_inputs.emplace_back(InputText(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kInputImage:
-        engine_inputs.emplace_back(litert::lm::InputImage(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kInputImageEnd:
-        engine_inputs.emplace_back(litert::lm::InputImageEnd());
-        break;
-      case kInputAudio:
-        engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kInputAudioEnd:
-        engine_inputs.emplace_back(litert::lm::InputAudioEnd());
-        break;
-    }
-  }
+  auto engine_inputs = ToEngineInputData(inputs, num_inputs);
   auto responses = session->session->GenerateContent(std::move(engine_inputs));
   if (!responses.ok()) {
     ABSL_LOG(ERROR) << "Failed to generate content: " << responses.status();
@@ -506,30 +580,7 @@ int litert_lm_session_generate_content_stream(LiteRtLmSession* session,
   if (!session || !session->session) {
     return -1;
   }
-  std::vector<litert::lm::InputData> engine_inputs;
-  engine_inputs.reserve(num_inputs);
-  for (size_t i = 0; i < num_inputs; ++i) {
-    switch (inputs[i].type) {
-      case kInputText:
-        engine_inputs.emplace_back(litert::lm::InputText(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kInputImage:
-        engine_inputs.emplace_back(litert::lm::InputImage(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kInputImageEnd:
-        engine_inputs.emplace_back(litert::lm::InputImageEnd());
-        break;
-      case kInputAudio:
-        engine_inputs.emplace_back(litert::lm::InputAudio(std::string(
-            static_cast<const char*>(inputs[i].data), inputs[i].size)));
-        break;
-      case kInputAudioEnd:
-        engine_inputs.emplace_back(litert::lm::InputAudioEnd());
-        break;
-    }
-  }
+  auto engine_inputs = ToEngineInputData(inputs, num_inputs);
 
   absl::Status status = session->session->GenerateContentStream(
       std::move(engine_inputs), CreateCallback(callback, callback_data));
@@ -550,7 +601,15 @@ int litert_lm_responses_get_num_candidates(const LiteRtLmResponses* responses) {
   if (!responses) {
     return 0;
   }
-  return responses->responses.GetTexts().size();
+  const auto& r = responses->responses;
+  size_t num_candidates = r.GetTexts().size();
+  if (num_candidates == 0) {
+    num_candidates = r.GetScores().size();
+  }
+  if (num_candidates == 0 && r.GetTokenLengths().has_value()) {
+    num_candidates = r.GetTokenLengths()->size();
+  }
+  return static_cast<int>(num_candidates);
 }
 
 const char* litert_lm_responses_get_response_text_at(
@@ -564,6 +623,40 @@ const char* litert_lm_responses_get_response_text_at(
 
   // The string_view's data is valid as long as the responses object is alive.
   return responses->responses.GetTexts()[index].data();
+}
+
+bool litert_lm_responses_has_score_at(const LiteRtLmResponses* responses,
+                                      int index) {
+  if (!responses || index < 0 ||
+      index >= responses->responses.GetScores().size()) {
+    return false;
+  }
+  return true;
+}
+
+float litert_lm_responses_get_score_at(const LiteRtLmResponses* responses,
+                                       int index) {
+  if (!litert_lm_responses_has_score_at(responses, index)) {
+    return 0.0f;
+  }
+  return responses->responses.GetScores()[index];
+}
+
+bool litert_lm_responses_has_token_length_at(const LiteRtLmResponses* responses,
+                                             int index) {
+  if (!responses || !responses->responses.GetTokenLengths().has_value() ||
+      index < 0 || index >= responses->responses.GetTokenLengths()->size()) {
+    return false;
+  }
+  return true;
+}
+
+int litert_lm_responses_get_token_length_at(const LiteRtLmResponses* responses,
+                                            int index) {
+  if (!litert_lm_responses_has_token_length_at(responses, index)) {
+    return 0;
+  }
+  return (*responses->responses.GetTokenLengths())[index];
 }
 
 LiteRtLmBenchmarkInfo* litert_lm_session_get_benchmark_info(
@@ -782,6 +875,130 @@ LiteRtLmBenchmarkInfo* litert_lm_conversation_get_benchmark_info(
     return nullptr;
   }
   return new LiteRtLmBenchmarkInfo{std::move(*benchmark_info)};
+}
+
+LiteRtLmTokenizeResult* litert_lm_engine_tokenize(LiteRtLmEngine* engine,
+                                                  const char* text) {
+  if (!engine || !engine->engine || !text) {
+    return nullptr;
+  }
+  const auto& tokenizer = engine->engine->GetTokenizer();
+  auto token_ids =
+      const_cast<litert::lm::Tokenizer&>(tokenizer).TextToTokenIds(text);
+  if (!token_ids.ok()) {
+    ABSL_LOG(ERROR) << "Failed to tokenize: " << token_ids.status();
+    return nullptr;
+  }
+  return new LiteRtLmTokenizeResult{std::move(*token_ids)};
+}
+
+void litert_lm_tokenize_result_delete(LiteRtLmTokenizeResult* result) {
+  delete result;
+}
+
+const int* litert_lm_tokenize_result_get_tokens(
+    const LiteRtLmTokenizeResult* result) {
+  if (!result) {
+    return nullptr;
+  }
+  return result->tokens.data();
+}
+
+size_t litert_lm_tokenize_result_get_num_tokens(
+    const LiteRtLmTokenizeResult* result) {
+  if (!result) {
+    return 0;
+  }
+  return result->tokens.size();
+}
+
+LiteRtLmDetokenizeResult* litert_lm_engine_detokenize(LiteRtLmEngine* engine,
+                                                      const int* tokens,
+                                                      size_t num_tokens) {
+  if (!engine || !engine->engine || !tokens) {
+    return nullptr;
+  }
+  const auto& tokenizer = engine->engine->GetTokenizer();
+  std::vector<int> token_ids(tokens, tokens + num_tokens);
+  auto text =
+      const_cast<litert::lm::Tokenizer&>(tokenizer).TokenIdsToText(token_ids);
+  if (!text.ok()) {
+    ABSL_LOG(ERROR) << "Failed to detokenize: " << text.status();
+    return nullptr;
+  }
+  return new LiteRtLmDetokenizeResult{std::move(*text)};
+}
+
+void litert_lm_detokenize_result_delete(LiteRtLmDetokenizeResult* result) {
+  delete result;
+}
+
+const char* litert_lm_detokenize_result_get_string(
+    const LiteRtLmDetokenizeResult* result) {
+  if (!result) {
+    return nullptr;
+  }
+  return result->text.c_str();
+}
+
+int litert_lm_engine_get_bos_token_id(LiteRtLmEngine* engine,
+                                      int* out_token_id) {
+  if (!engine || !engine->engine || !out_token_id) {
+    return -1;
+  }
+  const auto& metadata = engine->engine->GetEngineSettings().GetLlmMetadata();
+  if (!metadata.has_value() || !metadata->has_start_token() ||
+      !metadata->start_token().has_token_ids() ||
+      metadata->start_token().token_ids().ids_size() == 0) {
+    return -1;
+  }
+  *out_token_id = metadata->start_token().token_ids().ids(0);
+  return 0;
+}
+
+LiteRtLmTokenSequences* litert_lm_engine_get_eos_token_ids(
+    LiteRtLmEngine* engine) {
+  if (!engine || !engine->engine) {
+    return nullptr;
+  }
+  const auto& metadata = engine->engine->GetEngineSettings().GetLlmMetadata();
+  if (!metadata.has_value()) {
+    return nullptr;
+  }
+  auto* c_sequences = new LiteRtLmTokenSequences;
+  c_sequences->sequences.reserve(metadata->stop_tokens_size());
+  for (const auto& stop_token : metadata->stop_tokens()) {
+    if (!stop_token.has_token_ids()) {
+      continue;
+    }
+    c_sequences->sequences.push_back({stop_token.token_ids().ids().begin(),
+                                      stop_token.token_ids().ids().end()});
+  }
+  return c_sequences;
+}
+
+void litert_lm_token_sequences_delete(LiteRtLmTokenSequences* sequences) {
+  delete sequences;
+}
+
+size_t litert_lm_token_sequences_get_num_sequences(
+    const LiteRtLmTokenSequences* sequences) {
+  if (!sequences) {
+    return 0;
+  }
+  return sequences->sequences.size();
+}
+
+int litert_lm_token_sequences_get_sequence_at(
+    const LiteRtLmTokenSequences* sequences, size_t index,
+    const int** out_tokens, size_t* out_num_tokens) {
+  if (!sequences || index >= sequences->sequences.size() || !out_tokens ||
+      !out_num_tokens) {
+    return -1;
+  }
+  *out_tokens = sequences->sequences[index].data();
+  *out_num_tokens = sequences->sequences[index].size();
+  return 0;
 }
 
 }  // extern "C"
