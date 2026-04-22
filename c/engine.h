@@ -131,7 +131,8 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_conversation_config_delete(LiteRtLmConversationConfig* config);
 
 // Sets the minimum log level for the LiteRT LM library.
-// Log levels are: 0=INFO, 1=WARNING, 2=ERROR, 3=FATAL.
+// Log levels are: 0=VERBOSE, 1=DEBUG, 2=INFO, 3=WARNING, 4=ERROR, 5=FATAL,
+// 1000=SILENT.
 LITERT_LM_C_API_EXPORT
 void litert_lm_set_min_log_level(int level);
 

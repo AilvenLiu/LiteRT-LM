@@ -39,6 +39,7 @@
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/llm_executor_settings.h"
 #include "runtime/proto/sampler_params.pb.h"
+#include "runtime/util/logging.h"
 
 namespace {
 
@@ -148,6 +149,10 @@ struct LiteRtLmConversationConfig {
 };
 
 extern "C" {
+
+void litert_lm_set_min_log_level(int level) {
+  litert::lm::SetMinLogSeverity(static_cast<litert::lm::LogSeverity>(level));
+}
 
 SamplerParameters::Type ToSamplerParametersType(Type type) {
   switch (type) {
