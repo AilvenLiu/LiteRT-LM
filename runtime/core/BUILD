@@ -85,6 +85,7 @@ ENGINE_IMPL_COMMON_DEPS = [
     ],
     "//conditions:default": [
         "@litert//litert/cc:litert_environment",
+        "@litert//litert/cc:litert_environment_options",
     ],
 })
 

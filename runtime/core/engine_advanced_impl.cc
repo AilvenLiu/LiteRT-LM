@@ -32,6 +32,7 @@
 #include "absl/time/clock.h"  // from @com_google_absl
 #include "absl/time/time.h"  // from @com_google_absl
 #include "litert/cc/litert_environment.h"  // from @litert
+#include "litert/cc/litert_environment_options.h"  // from @litert
 #include "litert/cc/litert_macros.h"  // from @litert
 #include "runtime/components/model_resources.h"
 #include "runtime/components/tokenizer.h"
@@ -71,7 +72,7 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
   static absl::NoDestructor<MagicNumberConfigsHelper> helper;
   static absl::NoDestructor<absl::StatusOr<Environment>> kEnvironment(
       [&]() -> absl::StatusOr<Environment> {
-        std::vector<Environment::Option> env_options;
+        std::vector<EnvironmentOptions::Option> env_options;
         const auto& main_executor_settings =
             engine_settings.GetMainExecutorSettings();
 
@@ -91,8 +92,8 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
 #else
           if (!main_executor_settings.GetLitertDispatchLibDir().empty()) {
             // If the dispatch library directory is provided, use it.
-            env_options.push_back(::litert::Environment::Option{
-                ::litert::Environment::OptionTag::DispatchLibraryDir,
+            env_options.push_back(::litert::EnvironmentOptions::Option{
+                ::litert::EnvironmentOptions::Tag::kDispatchLibraryDir,
                 main_executor_settings.GetLitertDispatchLibDir()});
             ABSL_LOG(INFO) << "Setting dispatch library path from "
                               "main_executor_settings: "
@@ -109,8 +110,8 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
             if (!kDispatchLibraryPath->empty()) {
               ABSL_LOG(INFO)
                   << "Setting dispatch library path: " << *kDispatchLibraryPath;
-              env_options.push_back(::litert::Environment::Option{
-                  ::litert::Environment::OptionTag::DispatchLibraryDir,
+              env_options.push_back(::litert::EnvironmentOptions::Option{
+                  ::litert::EnvironmentOptions::Tag::kDispatchLibraryDir,
                   absl::string_view(*kDispatchLibraryPath)});
             } else {
               ABSL_LOG(INFO) << "No dispatch library path provided.";
@@ -118,7 +119,8 @@ absl::StatusOr<Environment&> GetEnvironment(EngineSettings& engine_settings,
           }
 #endif  // defined(LITERT_DISABLE_NPU)
         }
-        LITERT_ASSIGN_OR_RETURN(auto env, Environment::Create(env_options));
+        LITERT_ASSIGN_OR_RETURN(
+            auto env, Environment::Create(EnvironmentOptions(env_options)));
         return std::move(env);
       }());
   if (!kEnvironment->ok()) {

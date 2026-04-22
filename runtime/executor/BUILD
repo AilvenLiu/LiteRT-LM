@@ -993,6 +993,7 @@ cc_library(
         ],
         "//conditions:default": [
             "@litert//litert/cc:litert_environment",
+            "@litert//litert/cc:litert_environment_options",
             "@litert//litert/cc:litert_expected",
             "@litert//litert/cc:litert_macros",
             "@litert//litert/cc:litert_model",
