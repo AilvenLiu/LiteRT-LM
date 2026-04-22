@@ -701,17 +701,19 @@ TEST(EngineCTest, TokenizerTest) {
     size_t num_tokens =
         litert_lm_token_unions_get_num_tokens(stop_tokens.get());
     for (size_t i = 0; i < num_tokens; ++i) {
-      const LiteRtLmTokenUnion* stop_token =
-          litert_lm_token_unions_get_token_at(stop_tokens.get(), i);
+      TokenUnionPtr stop_token(
+          litert_lm_token_unions_get_token_at(stop_tokens.get(), i),
+          &litert_lm_token_union_delete);
       ASSERT_NE(stop_token, nullptr);
-      if (litert_lm_token_union_get_type(stop_token) ==
+      if (litert_lm_token_union_get_type(stop_token.get()) ==
           kLiteRtLmTokenUnionTypeIds) {
         const int* ids;
         size_t num_ids;
-        EXPECT_EQ(litert_lm_token_union_get_ids(stop_token, &ids, &num_ids), 0);
+        EXPECT_EQ(
+            litert_lm_token_union_get_ids(stop_token.get(), &ids, &num_ids), 0);
         EXPECT_GT(num_ids, 0);
       } else {
-        EXPECT_NE(litert_lm_token_union_get_string(stop_token), nullptr);
+        EXPECT_NE(litert_lm_token_union_get_string(stop_token.get()), nullptr);
       }
     }
   }

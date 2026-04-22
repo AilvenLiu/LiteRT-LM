@@ -165,6 +165,12 @@ struct LiteRtLmBenchmarkInfo {
 
 struct LiteRtLmConversation {
   std::unique_ptr<Conversation> conversation;
+  // This field stores the result of the last call to
+  // `litert_lm_conversation_render_message_to_string`. This ties the lifetime
+  // of the returned `const char*` to the `LiteRtLmConversation` object,
+  // ensuring memory safety for the C API caller without requiring explicit
+  // per-call deallocation.
+  std::string last_rendered_message;
 };
 
 struct LiteRtLmJsonResponse {
@@ -182,7 +188,9 @@ struct LiteRtLmConversationConfig {
   std::string system_message_json;
   std::string tools_json;
   std::string messages_json;
+  std::string extra_context_json;
   bool enable_constrained_decoding = false;
+  bool filter_channel_content_from_kv_cache = false;
 };
 
 struct LiteRtLmDetokenizeResult {
@@ -294,10 +302,26 @@ void litert_lm_conversation_config_set_messages(
   }
 }
 
+void litert_lm_conversation_config_set_extra_context(
+    LiteRtLmConversationConfig* config, const char* extra_context_json) {
+  if (config && extra_context_json) {
+    config->extra_context_json = extra_context_json;
+  }
+}
+
 void litert_lm_conversation_config_set_enable_constrained_decoding(
     LiteRtLmConversationConfig* config, bool enable_constrained_decoding) {
   if (config) {
     config->enable_constrained_decoding = enable_constrained_decoding;
+  }
+}
+
+void litert_lm_conversation_config_set_filter_channel_content_from_kv_cache(
+    LiteRtLmConversationConfig* config,
+    bool filter_channel_content_from_kv_cache) {
+  if (config) {
+    config->filter_channel_content_from_kv_cache =
+        filter_channel_content_from_kv_cache;
   }
 }
 
@@ -549,6 +573,21 @@ LiteRtLmResponses* litert_lm_session_run_decode(LiteRtLmSession* session) {
   return new LiteRtLmResponses{std::move(*responses)};
 }
 
+int litert_lm_session_run_decode_async(LiteRtLmSession* session,
+                                       LiteRtLmStreamCallback callback,
+                                       void* callback_data) {
+  if (!session || !session->session) {
+    return -1;
+  }
+  auto status =
+      session->session->RunDecodeAsync(CreateCallback(callback, callback_data));
+  if (!status.ok()) {
+    ABSL_LOG(ERROR) << "Failed to start decode stream: " << status.status();
+    return static_cast<int>(status.status().code());
+  }
+  return 0;
+}
+
 LiteRtLmResponses* litert_lm_session_generate_content(
     LiteRtLmSession* session, const LiteRtLmInputData* inputs,
     size_t num_inputs) {
@@ -795,12 +834,27 @@ LiteRtLmConversation* litert_lm_conversation_create(
       }
     }
 
+    if (!c_config->extra_context_json.empty()) {
+      auto extra_context_parsed = nlohmann::ordered_json::parse(
+          c_config->extra_context_json, nullptr, false);
+      if (!extra_context_parsed.is_discarded() &&
+          extra_context_parsed.is_object()) {
+        json_preface.extra_context = std::move(extra_context_parsed);
+      } else {
+        ABSL_LOG(ERROR)
+            << "Failed to parse extra context JSON or not an object: "
+            << c_config->extra_context_json;
+      }
+    }
+
     auto builder = litert::lm::ConversationConfig::Builder();
     if (c_config->session_config) {
       builder.SetSessionConfig(*c_config->session_config);
     }
     builder.SetPreface(json_preface);
     builder.SetEnableConstrainedDecoding(c_config->enable_constrained_decoding);
+    builder.SetFilterChannelContentFromKvCache(
+        c_config->filter_channel_content_from_kv_cache);
     auto config = builder.Build(*engine->engine);
 
     if (!config.ok()) {
@@ -900,6 +954,29 @@ int litert_lm_conversation_send_message_stream(
     return static_cast<int>(status.code());
   }
   return 0;
+}
+
+const char* litert_lm_conversation_render_message_to_string(
+    LiteRtLmConversation* conversation, const char* message_json) {
+  if (!conversation || !conversation->conversation || !message_json) {
+    return nullptr;
+  }
+  nlohmann::json json_message =
+      nlohmann::json::parse(message_json, /*cb=*/nullptr,
+                            /*allow_exceptions=*/false);
+  if (json_message.is_discarded()) {
+    ABSL_LOG(ERROR) << "Failed to parse message JSON.";
+    return nullptr;
+  }
+
+  auto rendered = conversation->conversation->RenderMessageIntoString(
+      json_message, litert::lm::OptionalArgs());
+  if (!rendered.ok()) {
+    ABSL_LOG(ERROR) << "Failed to render message: " << rendered.status();
+    return nullptr;
+  }
+  conversation->last_rendered_message = std::move(*rendered);
+  return conversation->last_rendered_message.c_str();
 }
 
 void litert_lm_conversation_cancel_process(LiteRtLmConversation* conversation) {
@@ -1031,12 +1108,14 @@ size_t litert_lm_token_unions_get_num_tokens(
   return tokens->tokens.size();
 }
 
-const LiteRtLmTokenUnion* litert_lm_token_unions_get_token_at(
+LiteRtLmTokenUnion* litert_lm_token_unions_get_token_at(
     const LiteRtLmTokenUnions* tokens, size_t index) {
   if (!tokens || index >= tokens->tokens.size()) {
     return nullptr;
   }
-  return reinterpret_cast<const LiteRtLmTokenUnion*>(&tokens->tokens[index]);
+  auto* result = new LiteRtLmTokenUnion();
+  result->token_union = tokens->tokens[index];
+  return result;
 }
 
 LiteRtLmTokenUnion* litert_lm_engine_get_start_token(LiteRtLmEngine* engine) {

@@ -323,7 +323,7 @@ class AbstractConversation(abc.ABC):
 
 
 @dataclasses.dataclass
-class BenchmarkInfo(abc.ABC):
+class BenchmarkInfo:
   """Results from a benchmark run.
 
   Attributes:
@@ -384,9 +384,10 @@ class Responses:
   parallel response processed in decode. Most models have batch size equals 1.
 
   Attributes:
-      texts: The generated text(s) from the model. The list length is equal to
-        the batch size in "run_decode".  This field is only used in
-        "run_decode". "run_text_scoring".
+      texts: The generated text(s) from the model in "run_decode", or the target
+        text(s) in "run_text_scoring". The list length is equal to the batch
+        size in "run_decode" or the length of "target_text" in
+        "run_text_scoring".
       scores: The scores associated with the generated text(s). The list length
         is equal to length of the "target_text" in "run_text_scoring" or the
         batch size in "run_decode".
