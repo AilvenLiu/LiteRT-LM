@@ -15,6 +15,7 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LM_RUNTIME_CONVERSATION_MODEL_DATA_PROCESSOR_GEMMA4_DATA_PROCESSOR_CONFIG_H_
 #define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_CONVERSATION_MODEL_DATA_PROCESSOR_GEMMA4_DATA_PROCESSOR_CONFIG_H_
 
+#include <optional>
 #include <string>
 
 namespace litert::lm {
@@ -76,7 +77,12 @@ struct Gemma4DataProcessorConfig {
 };
 
 // Arguments for Gemma4DataProcessor.
-struct Gemma4DataProcessorArguments {};
+struct Gemma4DataProcessorArguments {
+  // The maximum number of patches that the image preprocessor should patchify
+  // the image to. If not set, the value in
+  // Gemma4DataProcessorConfig.max_num_patches will be used.
+  std::optional<int> max_num_patches;
+};
 
 }  // namespace litert::lm
 
