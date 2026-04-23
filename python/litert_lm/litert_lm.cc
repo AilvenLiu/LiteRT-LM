@@ -487,7 +487,6 @@ NB_MODULE(litert_lm_ext, module) {
       [](std::string_view model_path, const nb::handle& backend,
          std::optional<int> max_num_tokens, std::string_view cache_dir,
          const nb::handle& vision_backend, const nb::handle& audio_backend,
-         std::string_view input_prompt_as_hint,
          std::optional<bool> enable_speculative_decoding) {
         Backend main_backend = ParseBackend(backend);
         std::optional<Backend> vision_backend_opt = std::nullopt;
@@ -527,7 +526,7 @@ NB_MODULE(litert_lm_ext, module) {
         }
 
         auto engine = VALUE_OR_THROW(
-            EngineFactory::CreateDefault(settings, input_prompt_as_hint));
+            EngineFactory::CreateDefault(std::move(settings)));
 
         nb::object py_engine = nb::cast(std::move(engine));
         py_engine.attr("model_path") = model_path;
@@ -544,7 +543,6 @@ NB_MODULE(litert_lm_ext, module) {
       nb::arg("max_num_tokens") = nb::none(), nb::arg("cache_dir") = "",
       nb::arg("vision_backend") = nb::none(),
       nb::arg("audio_backend") = nb::none(),
-      nb::arg("input_prompt_as_hint") = "",
       nb::arg("enable_speculative_decoding") = nb::none());
 
   module.def(
