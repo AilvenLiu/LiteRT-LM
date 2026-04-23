@@ -174,8 +174,10 @@ def _setup_lib_signatures(lib):
       ctypes.c_void_p,
       ctypes.c_int,
   ]
-  # Split: lib.litert_lm_session_config_set_apply_prompt_template.argtypes = [
-  #     ctypes.c_void_p, ctypes.c_bool]
+  lib.litert_lm_session_config_set_apply_prompt_template.argtypes = [
+      ctypes.c_void_p,
+      ctypes.c_bool,
+  ]
   lib.litert_lm_session_config_set_sampler_params.argtypes = [
       ctypes.c_void_p,
       ctypes.POINTER(LiteRtLmSamplerParams),
@@ -312,6 +314,23 @@ def _setup_lib_signatures(lib):
   ]
   lib.litert_lm_responses_get_token_length_at.restype = ctypes.c_int
   lib.litert_lm_responses_get_token_length_at.argtypes = [
+      ctypes.c_void_p,
+      ctypes.c_int,
+  ]
+  lib.litert_lm_responses_has_token_scores_at.restype = ctypes.c_bool
+  lib.litert_lm_responses_has_token_scores_at.argtypes = [
+      ctypes.c_void_p,
+      ctypes.c_int,
+  ]
+  lib.litert_lm_responses_get_num_token_scores_at.restype = ctypes.c_int
+  lib.litert_lm_responses_get_num_token_scores_at.argtypes = [
+      ctypes.c_void_p,
+      ctypes.c_int,
+  ]
+  lib.litert_lm_responses_get_token_scores_at.restype = ctypes.POINTER(
+      ctypes.c_float
+  )
+  lib.litert_lm_responses_get_token_scores_at.argtypes = [
       ctypes.c_void_p,
       ctypes.c_int,
   ]
