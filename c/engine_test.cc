@@ -241,6 +241,21 @@ TEST(EngineCTest, CreateSessionConfigWithNoSamplerParams) {
             litert::lm::proto::SamplerParameters::TYPE_UNSPECIFIED);
 }
 
+TEST(EngineCTest, CreateSessionConfigWithApplyPromptTemplate) {
+  SessionConfigPtr config(litert_lm_session_config_create(),
+                          &litert_lm_session_config_delete);
+  ASSERT_NE(config, nullptr);
+
+  // By default, it is true.
+  EXPECT_TRUE(config->config->GetApplyPromptTemplateInSession());
+
+  litert_lm_session_config_set_apply_prompt_template(config.get(), false);
+  EXPECT_FALSE(config->config->GetApplyPromptTemplateInSession());
+
+  litert_lm_session_config_set_apply_prompt_template(config.get(), true);
+  EXPECT_TRUE(config->config->GetApplyPromptTemplateInSession());
+}
+
 TEST(EngineCTest, CreateConversationConfig) {
   // 1. Create an engine.
   const std::string task_path = GetTestdataPath(
@@ -978,6 +993,47 @@ TEST(EngineCTest, GenerateContentStream) {
                          absl::StatusCode::kInternal,
                          testing::HasSubstr("Max number of tokens reached."))));
   EXPECT_GT(callback_data.response.length(), 0);
+}
+
+TEST(EngineCTest, SessionGenerateContentStreamAndCancel) {
+  const std::string task_path = GetTestdataPath(
+      "litert_lm/runtime/testdata/test_lm_new_metadata.task");
+
+  EngineSettingsPtr settings(
+      litert_lm_engine_settings_create(task_path.c_str(), "cpu",
+                                       /* vision_backend_str */ nullptr,
+                                       /* audio_backend_str */ nullptr),
+      &litert_lm_engine_settings_delete);
+  ASSERT_NE(settings, nullptr);
+  litert_lm_engine_settings_set_max_num_tokens(settings.get(), 128);
+
+  EnginePtr engine(litert_lm_engine_create(settings.get()),
+                   &litert_lm_engine_delete);
+  ASSERT_NE(engine, nullptr);
+
+  SessionPtr session(litert_lm_engine_create_session(
+                         engine.get(), /* session_config */ nullptr),
+                     &litert_lm_session_delete);
+  ASSERT_NE(session, nullptr);
+
+  const char* prompt =
+      "Hello world! Write a long essay about the history of Rome.";
+  LiteRtLmInputData input_data;
+  input_data.type = kLiteRtLmInputDataTypeText;
+  input_data.data = prompt;
+  input_data.size = strlen(prompt);
+  StreamCallbackData callback_data;
+  int result = litert_lm_session_generate_content_stream(
+      session.get(), &input_data, 1, &StreamCallback, &callback_data);
+  ASSERT_EQ(result, 0);
+
+  litert_lm_session_cancel_process(session.get());
+
+  callback_data.done.WaitForNotification();
+
+  EXPECT_THAT(callback_data.status,
+              absl_testing::StatusIs(absl::StatusCode::kInternal,
+                                     testing::HasSubstr("CANCELLED")));
 }
 
 TEST(EngineCTest, ConversationSendMessageStream) {

@@ -229,6 +229,13 @@ void litert_lm_session_config_set_max_output_tokens(
   }
 }
 
+void litert_lm_session_config_set_apply_prompt_template(
+    LiteRtLmSessionConfig* config, bool apply_prompt_template) {
+  if (config && config->config) {
+    config->config->SetApplyPromptTemplateInSession(apply_prompt_template);
+  }
+}
+
 void litert_lm_session_config_set_sampler_params(
     LiteRtLmSessionConfig* config,
     const LiteRtLmSamplerParams* sampler_params) {
@@ -515,6 +522,12 @@ LiteRtLmSession* litert_lm_engine_create_session(
 }
 
 void litert_lm_session_delete(LiteRtLmSession* session) { delete session; }
+
+void litert_lm_session_cancel_process(LiteRtLmSession* session) {
+  if (session && session->session) {
+    session->session->CancelProcess();
+  }
+}
 
 LiteRtLmResponses* litert_lm_session_run_text_scoring(
     LiteRtLmSession* session, const char** target_text, size_t num_targets,

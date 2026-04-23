@@ -123,6 +123,13 @@ LITERT_LM_C_API_EXPORT
 void litert_lm_session_config_set_max_output_tokens(
     LiteRtLmSessionConfig* config, int max_output_tokens);
 
+// Sets whether to apply prompt template for this session.
+// @param config The config to modify.
+// @param apply_prompt_template Whether to apply prompt template.
+LITERT_LM_C_API_EXPORT
+void litert_lm_session_config_set_apply_prompt_template(
+    LiteRtLmSessionConfig* config, bool apply_prompt_template);
+
 // Sets the sampler parameters for this session config.
 // @param config The config to modify.
 // @param sampler_params The sampler parameters to use.
@@ -306,6 +313,12 @@ LiteRtLmSession* litert_lm_engine_create_session(LiteRtLmEngine* engine,
 // @param session The session to destroy.
 LITERT_LM_C_API_EXPORT
 void litert_lm_session_delete(LiteRtLmSession* session);
+
+// Cancels the current processing in the session.
+//
+// @param session The session to cancel processing on.
+LITERT_LM_C_API_EXPORT
+void litert_lm_session_cancel_process(LiteRtLmSession* session);
 
 // Adds the input prompt/query to the model for starting the prefilling
 // process. This is a blocking call and the function will return when the
