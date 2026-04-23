@@ -124,6 +124,7 @@ class Session(interfaces.AbstractSession):
       texts = []
       scores = []
       lengths = []
+      token_scores = []
       for i in range(num):
         t = self._lib.litert_lm_responses_get_response_text_at(resp_ptr, i)
         if t is not None:
@@ -134,8 +135,20 @@ class Session(interfaces.AbstractSession):
           lengths.append(
               self._lib.litert_lm_responses_get_token_length_at(resp_ptr, i)
           )
+        if self._lib.litert_lm_responses_has_token_scores_at(resp_ptr, i):
+          num_scores = self._lib.litert_lm_responses_get_num_token_scores_at(
+              resp_ptr, i
+          )
+          scores_ptr = self._lib.litert_lm_responses_get_token_scores_at(
+              resp_ptr, i
+          )
+          if scores_ptr:
+            token_scores.append([scores_ptr[j] for j in range(num_scores)])
       return interfaces.Responses(
-          texts=texts, scores=scores, token_lengths=lengths
+          texts=texts,
+          scores=scores,
+          token_lengths=lengths,
+          token_scores=token_scores,
       )
     finally:
       self._lib.litert_lm_responses_delete(resp_ptr)
