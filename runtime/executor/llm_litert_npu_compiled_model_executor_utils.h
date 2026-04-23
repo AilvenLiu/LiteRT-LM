@@ -18,8 +18,10 @@
 #include <cstddef>
 #include <limits>
 
+#include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
+#include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/cc/litert_macros.h"  // from @litert
 #include "litert/cc/litert_ranked_tensor_type.h"  // from @litert
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
@@ -77,6 +79,11 @@ absl::StatusOr<int> FindMaxIndex(::litert::TensorBuffer& decoded_logits,
 absl::StatusOr<int> ApplyGreedySampling(::litert::TensorBuffer& decoded_logits,
                                         bool use_neon_sampling);
 
+// Performs manual KV cache update.
+absl::Status HWKVCacheUpdate(
+    absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>& in_buffers,
+    absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
+        out_buffers);
 }  // namespace litert::lm
 
 #endif  // THIRD_PARTY_ODML_LITERT_LM_RUNTIME_EXECUTOR_LLM_LITERT_NPU_COMPILED_MODEL_EXECUTOR_UTILS_H_

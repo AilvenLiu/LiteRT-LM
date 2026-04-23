@@ -88,10 +88,31 @@ constexpr char cache_v17[] = "kv_cache_v_17";
 constexpr absl::string_view kv_cache_k_root_name = "kv_cache_k_";
 constexpr absl::string_view kv_cache_v_root_name = "kv_cache_v_";
 
+constexpr absl::string_view kv_cache_slice_k_root_name = "kv_slice_k_";
+constexpr absl::string_view kv_cache_slice_v_root_name = "kv_slice_v_";
+
+namespace {
 // Whether to use NEON optimizations for sampling.
 // TODO(yunandrew): Remove this once the NEON optimizations are stable, or
 // engine level provides nob for controlling this.
 static constexpr bool kUseNeonSamplingIfAvailable = false;
+
+using LogitsQuantizationParams =
+    LlmLiteRtNpuCompiledModelExecutor::LogitsQuantizationParams;
+
+enum class KVCacheUpdateMethod {
+  kModel,
+  kWH,
+};
+
+// TODO(yunandrew): Remove these once engine level provides knob for controlling
+// this.
+static constexpr KVCacheUpdateMethod kPrefillKVCacheUpdateMethod =
+    KVCacheUpdateMethod::kModel;
+static constexpr KVCacheUpdateMethod kDecodeKVCacheUpdateMethod =
+    KVCacheUpdateMethod::kModel;
+
+}  // namespace
 
 constexpr bool kEnableDecodingDebugLogging = false;
 #define NPU_EXECUTOR_LOG(X) ABSL_LOG_IF(X, kEnableDecodingDebugLogging)
@@ -478,12 +499,6 @@ LlmLiteRtNpuCompiledModelExecutor::CreateLiteRtCpuOptions(
   options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);
   return options;
 }
-namespace {
-
-using LogitsQuantizationParams =
-    LlmLiteRtNpuCompiledModelExecutor::LogitsQuantizationParams;
-
-}  // namespace
 
 LlmLiteRtNpuCompiledModelExecutor::~LlmLiteRtNpuCompiledModelExecutor() {
   ABSL_VLOG(1) << "LatencyStats: " << GetLatencyStats();
@@ -819,9 +834,6 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::AllocateTransformerBuffers(
     absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
         verify_output_kv_cache_slice_buffers) {
   auto prefill_signature = transformer_model->FindSignature(kPrefillSignature);
-
-  constexpr absl::string_view kv_cache_slice_k_root_name = "kv_slice_k_";
-  constexpr absl::string_view kv_cache_slice_v_root_name = "kv_slice_v_";
 
   // Create input buffers for prefill signature.
   for (auto input_name : prefill_signature->InputNames()) {
@@ -1902,15 +1914,21 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::PrefillInternal(
   // Cache update.
   {
     auto start = absl::Now();
-    auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
-        CacheUpdateSignatures::kPrefillCacheUpdate,
-        cache_update_inference_context_.prefill_input_buffers,
-        cache_update_inference_context_.prefill_output_buffers);
+    if (kPrefillKVCacheUpdateMethod == KVCacheUpdateMethod::kWH) {
+      RETURN_IF_ERROR(HWKVCacheUpdate(
+          cache_update_inference_context_.prefill_input_buffers,
+          cache_update_inference_context_.prefill_output_buffers));
+    } else {
+      auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
+          CacheUpdateSignatures::kPrefillCacheUpdate,
+          cache_update_inference_context_.prefill_input_buffers,
+          cache_update_inference_context_.prefill_output_buffers);
+      RET_CHECK(res) << "Failed to run cache update model."
+                     << res.Error().Message();
+    }
     auto end = absl::Now();
     latency_stats_.prefill_cache_update_inference_latency_us +=
         absl::ToInt64Microseconds(end - start);
-    RET_CHECK(res) << "Failed to run cache update model."
-                   << res.Error().Message();
   }
   return absl::OkStatus();
 }
@@ -2051,12 +2069,18 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::DecodeInternal(
   // Cache update.
   {
     auto start = absl::Now();
-    auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
-        CacheUpdateSignatures::kDecodeCacheUpdate,
-        cache_update_inference_context_.decode_input_buffers,
-        cache_update_inference_context_.decode_output_buffers);
-    RET_CHECK(res) << "Failed to run cache update model."
-                   << res.Error().Message();
+    if (kDecodeKVCacheUpdateMethod == KVCacheUpdateMethod::kWH) {
+      RETURN_IF_ERROR(HWKVCacheUpdate(
+          cache_update_inference_context_.decode_input_buffers,
+          cache_update_inference_context_.decode_output_buffers));
+    } else {
+      auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
+          CacheUpdateSignatures::kDecodeCacheUpdate,
+          cache_update_inference_context_.decode_input_buffers,
+          cache_update_inference_context_.decode_output_buffers);
+      RET_CHECK(res) << "Failed to run cache update model."
+                     << res.Error().Message();
+    }
     auto end = absl::Now();
     latency_stats_.decode_cache_update_inference_latency_us +=
         absl::ToInt64Microseconds(end - start);
@@ -2478,11 +2502,17 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::CommitVerifiedKVCache(
       pos_ptr[i] = start_step + i;
     }
   }
-  LITERT_RETURN_IF_ERROR(
-      npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
-          CacheUpdateSignatures::kVerifyCacheUpdate,
-          cache_update_inference_context_.verify_input_buffers,
-          cache_update_inference_context_.verify_output_buffers));
+  if (kPrefillKVCacheUpdateMethod == KVCacheUpdateMethod::kWH) {
+    RETURN_IF_ERROR(
+        HWKVCacheUpdate(cache_update_inference_context_.verify_input_buffers,
+                        cache_update_inference_context_.verify_output_buffers));
+  } else {
+    LITERT_RETURN_IF_ERROR(
+        npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
+            CacheUpdateSignatures::kVerifyCacheUpdate,
+            cache_update_inference_context_.verify_input_buffers,
+            cache_update_inference_context_.verify_output_buffers));
+  }
   return absl::OkStatus();
 }
 
