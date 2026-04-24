@@ -35,7 +35,6 @@
 #include <vector>
 
 #include "absl/functional/any_invocable.h"  // from @com_google_absl
-#include "absl/log/absl_check.h"  // from @com_google_absl
 #include "absl/log/absl_log.h"  // from @com_google_absl
 #include "absl/log/log_sink_registry.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
@@ -219,9 +218,8 @@ absl::StatusOr<Message> RunSingleTurnConversation(
   bool should_print_output = settings.benchmark_prefill_tokens == 0;
   if (settings.async) {
     auto print_message_callback =
-        should_print_output
-            ? CreatePrintMessageCallback(captured_output)
-            : [](absl::StatusOr<Message> message) {};
+        should_print_output ? CreatePrintMessageCallback(captured_output)
+                            : [](absl::StatusOr<Message> message) {};
     RETURN_IF_ERROR(conversation->SendMessageAsync(
         json::object({{"role", "user"}, {"content", content_list}}),
         std::move(print_message_callback), std::move(optional_args)));
