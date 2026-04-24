@@ -536,6 +536,7 @@ absl::StatusOr<EngineSettings> CreateEngineSettings(
     npu_settings.use_hw_masking_for_npu = settings.use_hw_masking_for_npu;
     npu_settings.use_hw_cache_update_for_npu =
         settings.use_hw_cache_update_for_npu;
+    npu_settings.use_hw_ple_for_npu = settings.use_hw_ple_for_npu;
     npu_settings.enable_npu_debug_logging = settings.enable_npu_debug_logging;
     executor_settings.SetBackendConfig(npu_settings);
   }

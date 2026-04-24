@@ -268,6 +268,7 @@ absl::Status MainHelper(int argc, char** argv) {
   settings.use_hw_masking_for_npu = absl::GetFlag(FLAGS_use_hw_masking_for_npu);
   settings.use_hw_cache_update_for_npu =
       absl::GetFlag(FLAGS_use_hw_cache_update_for_npu);
+  settings.use_hw_ple_for_npu = absl::GetFlag(FLAGS_use_hw_ple_for_npu);
   settings.enable_npu_debug_logging =
       absl::GetFlag(FLAGS_enable_npu_debug_logging);
 

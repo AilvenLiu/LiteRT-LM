@@ -15,14 +15,17 @@
 #include "runtime/executor/llm_litert_npu_compiled_model_executor_utils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "absl/base/prefetch.h"  // from @com_google_absl
 
 #if defined(__ANDROID__) && defined(__ARM_NEON)
 #include <arm_neon.h>
@@ -558,4 +561,155 @@ absl::Status HWMaskUpdate(
 
   return absl::OkStatus();
 }
+namespace {
+#if defined(__ANDROID__) && defined(__ARM_NEON) && defined(__aarch64__)
+void UnpackInt4Row(const uint8_t* packed_data, float scale, int col_size,
+                   float* output) {
+  float scale0 = scale / 16.0f;
+  int j = 0;
+  int idx = 0;
+
+  int8x16_t mask_f0 = vdupq_n_s8(0xF0);
+
+  for (; j <= col_size - 32; j += 32, idx += 16) {
+    int8x16_t val =
+        vld1q_s8(reinterpret_cast<const int8_t*>(packed_data + idx));
+
+    int8x16_t low_16 = vshlq_n_s8(val, 4);
+    int8x16_t high_16 = vandq_s8(val, mask_f0);
+
+    // Low nibbles
+    int16x8_t l_i16_low = vmovl_s8(vget_low_s8(low_16));
+    int16x8_t l_i16_high = vmovl_high_s8(low_16);
+
+    int32x4_t l_i32_0 = vmovl_s16(vget_low_s16(l_i16_low));
+    int32x4_t l_i32_1 = vmovl_high_s16(l_i16_low);
+    int32x4_t l_i32_2 = vmovl_s16(vget_low_s16(l_i16_high));
+    int32x4_t l_i32_3 = vmovl_high_s16(l_i16_high);
+
+    float32x4_t l_f32_0 = vcvtq_f32_s32(l_i32_0);
+    float32x4_t l_f32_1 = vcvtq_f32_s32(l_i32_1);
+    float32x4_t l_f32_2 = vcvtq_f32_s32(l_i32_2);
+    float32x4_t l_f32_3 = vcvtq_f32_s32(l_i32_3);
+
+    // High nibbles
+    int16x8_t h_i16_low = vmovl_s8(vget_low_s8(high_16));
+    int16x8_t h_i16_high = vmovl_high_s8(high_16);
+
+    int32x4_t h_i32_0 = vmovl_s16(vget_low_s16(h_i16_low));
+    int32x4_t h_i32_1 = vmovl_high_s16(h_i16_low);
+    int32x4_t h_i32_2 = vmovl_s16(vget_low_s16(h_i16_high));
+    int32x4_t h_i32_3 = vmovl_high_s16(h_i16_high);
+
+    float32x4_t h_f32_0 = vcvtq_f32_s32(h_i32_0);
+    float32x4_t h_f32_1 = vcvtq_f32_s32(h_i32_1);
+    float32x4_t h_f32_2 = vcvtq_f32_s32(h_i32_2);
+    float32x4_t h_f32_3 = vcvtq_f32_s32(h_i32_3);
+
+    float32x4x2_t z0 = vzipq_f32(l_f32_0, h_f32_0);
+    float32x4x2_t z1 = vzipq_f32(l_f32_1, h_f32_1);
+    float32x4x2_t z2 = vzipq_f32(l_f32_2, h_f32_2);
+    float32x4x2_t z3 = vzipq_f32(l_f32_3, h_f32_3);
+
+    vst1q_f32(output + j + 0, vmulq_n_f32(z0.val[0], scale0));
+    vst1q_f32(output + j + 4, vmulq_n_f32(z0.val[1], scale0));
+    vst1q_f32(output + j + 8, vmulq_n_f32(z1.val[0], scale0));
+    vst1q_f32(output + j + 12, vmulq_n_f32(z1.val[1], scale0));
+    vst1q_f32(output + j + 16, vmulq_n_f32(z2.val[0], scale0));
+    vst1q_f32(output + j + 20, vmulq_n_f32(z2.val[1], scale0));
+    vst1q_f32(output + j + 24, vmulq_n_f32(z3.val[0], scale0));
+    vst1q_f32(output + j + 28, vmulq_n_f32(z3.val[1], scale0));
+  }
+
+  for (; j < col_size - 1; j += 2, ++idx) {
+    uint8_t packed_val = packed_data[idx];
+    int8_t i8_val0 = static_cast<int8_t>(packed_val << 4);
+    int8_t i8_val1 = static_cast<int8_t>(packed_val & 0xF0);
+
+    output[j] = static_cast<float>(i8_val0) * scale0;
+    output[j + 1] = static_cast<float>(i8_val1) * scale0;
+  }
+  if (col_size & 1) {
+    uint8_t packed_val = packed_data[idx];
+    int8_t i8_val0 = static_cast<int8_t>(packed_val << 4);
+    output[j] = static_cast<float>(i8_val0) * scale0;
+  }
+}
+#else
+void UnpackInt4Row(const uint8_t* packed_data, float scale, int col_size,
+                   float* output) {
+  float scale0 = scale / 16.0f;
+  int j = 0;
+  int idx = 0;
+  for (; j < col_size - 1; j += 2, ++idx) {
+    uint8_t packed_val = packed_data[idx];
+    int8_t i8_val0 = static_cast<int8_t>(packed_val << 4);
+    int8_t i8_val1 = static_cast<int8_t>(packed_val & 0xF0);
+
+    output[j] = static_cast<float>(i8_val0) * scale0;
+    output[j + 1] = static_cast<float>(i8_val1) * scale0;
+  }
+  if (col_size & 1) {
+    uint8_t packed_val = packed_data[idx];
+    int8_t i8_val0 = static_cast<int8_t>(packed_val << 4);
+    output[j] = static_cast<float>(i8_val0) * scale0;
+  }
+}
+#endif
+}  // namespace
+
+absl::Status HWPerLayerEmbeddingLookup(
+    const int* token_ids, int num_tokens, const uint8_t* const* table_ptrs,
+    const HWQuantizationParams* quant_params, int num_tables, int col_size,
+    void* output_buffer, litert::ElementType output_type, float final_scale,
+    int32_t final_zero_point) {
+  constexpr int kVocabSize = 262144;
+  std::vector<float> row_float;
+  if (output_type == litert::ElementType::Int16) {
+    row_float.resize(col_size);
+  }
+
+  for (int t = 0; t < num_tokens; ++t) {
+    int id = token_ids[t];
+    if (id < 0 || id >= kVocabSize) {
+      id = 0;  // Default to 0 as in model
+    }
+
+    size_t row_offset = id * (col_size / 2);
+
+    for (int table_idx = 0; table_idx < num_tables; ++table_idx) {
+      const uint8_t* table = table_ptrs[table_idx];
+      const HWQuantizationParams& qp = quant_params[table_idx];
+      const uint8_t* row_data = table + row_offset;
+
+      if (table_idx + 1 < num_tables) {
+        absl::PrefetchToLocalCache(table_ptrs[table_idx + 1] + row_offset);
+      }
+
+      float scale = 1.0f;
+      if (qp.scales) {
+        scale = qp.is_per_channel ? qp.scales[id] : qp.scales[0];
+      }
+
+      if (output_type == litert::ElementType::Int16) {
+        UnpackInt4Row(row_data, scale, col_size, row_float.data());
+        int16_t* int16_output = static_cast<int16_t*>(output_buffer) +
+                                t * num_tables * col_size +
+                                table_idx * col_size;
+        for (int i = 0; i < col_size; ++i) {
+          float fval = row_float[i];
+          int32_t qval = std::round(fval / final_scale) + final_zero_point;
+          qval = std::max(-32768, std::min(32767, qval));
+          int16_output[i] = static_cast<int16_t>(qval);
+        }
+      } else {
+        float* float_output = static_cast<float*>(output_buffer) +
+                              t * num_tables * col_size + table_idx * col_size;
+        UnpackInt4Row(row_data, scale, col_size, float_output);
+      }
+    }
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace litert::lm

@@ -124,6 +124,7 @@ struct LiteRtLmSettings {
   bool enable_neon_for_npu_greedy_sampling = true;
   bool use_hw_masking_for_npu = true;
   bool use_hw_cache_update_for_npu = true;
+  bool use_hw_ple_for_npu = true;
   bool enable_npu_debug_logging = false;
 };
 

@@ -150,5 +150,6 @@ ABSL_FLAG(bool, use_hw_masking_for_npu, true,
           "If true, use HW masking for NPU.");
 ABSL_FLAG(bool, use_hw_cache_update_for_npu, true,
           "If true, use HW cache update for NPU.");
+ABSL_FLAG(bool, use_hw_ple_for_npu, true, "If true, use HW PLE for NPU.");
 ABSL_FLAG(bool, enable_npu_debug_logging, false,
           "If true, enable debug logging for NPU.");

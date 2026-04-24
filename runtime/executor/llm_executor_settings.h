@@ -121,6 +121,9 @@ struct NpuConfig {
   // Whether to use manual KV-cache update logic on NPU.
   bool use_hw_cache_update_for_npu = true;
 
+  // Whether to use manual per-layer embedding lookup on NPU.
+  bool use_hw_ple_for_npu = true;
+
   // Whether enable debug logging for NPU.
   bool enable_npu_debug_logging = false;
 };
