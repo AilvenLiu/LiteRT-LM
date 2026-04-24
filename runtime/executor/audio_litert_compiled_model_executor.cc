@@ -96,26 +96,26 @@ absl::Status SetGpuOptions(
   gpu_options.SetBackend(GpuOptions::Backend::kWebGpu);
 #endif  // defined(LITERT_USE_WEBGPU_ACCELERATOR)
   gpu_options.EnableConstantTensorSharing(true);
-  // TODO(b/484646529): Re-enable precision setting once the GPU audio
-  // encoder precision is fixed. Similar to vision encoder, we force FP32 for
-  // now.
-  // if (executor_settings.GetActivationDataType().has_value()) {
-  //   if (executor_settings.GetActivationDataType().value() ==
-  //       ActivationDataType::FLOAT32) {
-  //     gpu_options.SetPrecision(GpuOptions::Precision::kFp32);
-  //   } else {
-  //     gpu_options.SetPrecision(GpuOptions::Precision::kFp16);
-  //   }
-  // } else {
-  //   gpu_options.SetPrecision(GpuOptions::Precision::kFp32);
-  // }
-  gpu_options.SetPrecision(GpuOptions::Precision::kFp32);
+  if (executor_settings.GetActivationDataType().has_value()) {
+    if (executor_settings.GetActivationDataType().value() ==
+        ActivationDataType::FLOAT32) {
+      gpu_options.SetPrecision(GpuOptions::Precision::kFp32);
+    } else {
+      gpu_options.SetPrecision(GpuOptions::Precision::kFp16);
+    }
+  } else {
+    // Default to fp32 if no activation data type is specified, for backward
+    // compatibility with previous launched models.
+    gpu_options.SetPrecision(GpuOptions::Precision::kFp32);
+  }
 #if defined(__APPLE__)
   gpu_options.SetPreferTextureWeights(false);
   gpu_options.SetUseMetalArgumentBuffers(true);
 #else   // !__APPLE__
   gpu_options.SetPreferTextureWeights(true);
 #endif  // !__APPLE__
+  gpu_options.SetMadviseOriginalSharedTensors(true);
+  gpu_options.SetConvertWeightsOnGpu(true);
   gpu_options.SetModelCacheKey(cache_key.data());
   std::string cache_path = weight_cache_path;
   bool serialization_dir_set = false;
