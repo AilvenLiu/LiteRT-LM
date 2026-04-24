@@ -32,7 +32,9 @@ extern "C" {
 #if defined(_WIN32)
 #define LITERT_LM_C_API_EXPORT __declspec(dllexport)
 #else
-#define LITERT_LM_C_API_EXPORT
+// Ensure symbols are exported when building the shared library with
+// -fvisibility=hidden.
+#define LITERT_LM_C_API_EXPORT __attribute__((visibility("default")))
 #endif
 
 // Opaque pointer for the LiteRT LM Engine.
@@ -559,6 +561,20 @@ double litert_lm_benchmark_info_get_decode_tokens_per_sec_at(
 // NULL on success.
 typedef void (*LiteRtLmStreamCallback)(void* callback_data, const char* chunk,
                                        bool is_final, const char* error_msg);
+
+// Starts the decoding process for the model to predict the response based
+// on the input prompt/query added after using litert_lm_session_run_prefill.
+// This is a non-blocking call that will stream responses via a callback.
+//
+// @param session The session to use.
+// @param callback The callback function to receive response chunks.
+// @param callback_data A pointer to user data that will be passed to the
+// callback.
+// @return 0 on success, non-zero on failure.
+LITERT_LM_C_API_EXPORT
+int litert_lm_session_run_decode_async(LiteRtLmSession* session,
+                                       LiteRtLmStreamCallback callback,
+                                       void* callback_data);
 
 // Generates content from the input prompt and streams the response via a
 // callback. This is a non-blocking call that will invoke the callback from a

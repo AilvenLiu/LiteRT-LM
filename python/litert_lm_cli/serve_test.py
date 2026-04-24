@@ -22,21 +22,37 @@ from absl.testing import parameterized
 
 # 1. Mock the C++ extension specifically to prevent loading it.
 # This MUST happen before importing anything from litert_lm.
-mock_litert_lm_ext = mock.MagicMock()
+mock_ffi = mock.MagicMock()
+mock_ffi.LogSeverity = type("LogSeverity", (), {})
+mock_ffi.set_min_log_severity = mock.Mock()
 
-# These must be classes because they are passed to abc.ABCMeta.register()
-# in litert_lm/__init__.py
-mock_litert_lm_ext._Benchmark = type("_Benchmark", (), {})
-mock_litert_lm_ext._Engine = type("_Engine", (), {})
-mock_litert_lm_ext.Benchmark = type("Benchmark", (), {})
-mock_litert_lm_ext.BenchmarkInfo = type("BenchmarkInfo", (), {})
-mock_litert_lm_ext.Conversation = type("Conversation", (), {})
-mock_litert_lm_ext.Engine = mock.Mock()
-mock_litert_lm_ext.Session = type("Session", (), {})
+mock_benchmark = mock.MagicMock()
+mock_benchmark.Benchmark = type("Benchmark", (), {})
 
+mock_conversation = mock.MagicMock()
+mock_conversation.Conversation = type("Conversation", (), {})
+
+mock_engine = mock.MagicMock()
+mock_engine.Engine = mock.Mock()
+
+mock_session = mock.MagicMock()
+mock_session.Session = type("Session", (), {})
+
+sys.modules["litert_lm._ffi"] = (
+    mock_ffi
+)
+sys.modules["litert_lm.benchmark"] = (
+    mock_benchmark
+)
 sys.modules[
-    "litert_lm.litert_lm_ext"
-] = mock_litert_lm_ext
+    "litert_lm.conversation"
+] = mock_conversation
+sys.modules["litert_lm.engine"] = (
+    mock_engine
+)
+sys.modules["litert_lm.session"] = (
+    mock_session
+)
 
 # 2. Now we can import the real litert_lm safely. It will use our mocked extension.
 import litert_lm as mock_litert_lm
@@ -44,8 +60,8 @@ from litert_lm import interfaces
 
 # 3. Explicitly override Engine and other classes with Mocks to ensure they don't
 # point to the mocked extension's classes which might not behave like standard mocks.
-mock_litert_lm.Engine = mock.Mock()
-mock_litert_lm.set_min_log_severity = mock.Mock()
+mock_litert_lm.Engine = mock_engine.Engine
+mock_litert_lm.set_min_log_severity = mock_ffi.set_min_log_severity
 
 # 4. Also mock model as it imports litert_lm too.
 mock_model_mod = mock.Mock(spec_set=["Model"])
@@ -66,8 +82,8 @@ class ServeTest(parameterized.TestCase):
     serve._current_engine = None
     serve._current_model_id = None
     # Reset mocks
-    mock_litert_lm.set_min_log_severity.reset_mock()
-    mock_litert_lm.Engine.reset_mock()
+    mock_litert_lm.set_min_log_severity.reset_mock()  # pytype: disable=attribute-error
+    mock_litert_lm.Engine.reset_mock()  # pytype: disable=attribute-error
     mock_model_mod.Model.from_model_id.reset_mock()
     mock_model_mod.Model.from_model_id.side_effect = None
 
@@ -240,12 +256,12 @@ class ServeTest(parameterized.TestCase):
     # First call - creates engine
     engine1 = serve.get_engine("test-model")
     self.assertEqual(engine1, mock_engine_instance)
-    mock_litert_lm.Engine.assert_called_once()
+    mock_litert_lm.Engine.assert_called_once()  # pytype: disable=attribute-error
 
     # Second call with same ID - returns cached engine
     engine2 = serve.get_engine("test-model")
     self.assertEqual(engine2, mock_engine_instance)
-    self.assertEqual(mock_litert_lm.Engine.call_count, 1)
+    self.assertEqual(mock_litert_lm.Engine.call_count, 1)  # pytype: disable=attribute-error
 
   def test_get_engine_recovery_after_failure(self):
     def from_id_side_effect(model_id):

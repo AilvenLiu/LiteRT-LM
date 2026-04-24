@@ -141,7 +141,8 @@ def gemini_to_litertlm_message(
 
 
 def litertlm_to_gemini_response(
-    litertlm_response: dict[str, Any], finish_reason: str = "STOP"
+    litertlm_response: collections.abc.Mapping[str, Any],
+    finish_reason: str = "STOP",
 ) -> dict[str, Any]:
   """Converts a LiteRT-LM response to a Gemini API response."""
   parts = []

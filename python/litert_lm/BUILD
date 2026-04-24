@@ -22,6 +22,45 @@ load("@rules_python//python:defs.bzl", "py_test")
 
 package(default_visibility = ["//visibility:public"])
 
+# Shared library of the LiteRT-LM C API.
+cc_binary(
+    name = "litert-lm",
+    srcs = [
+        "//c:engine.cc",
+        "//c:engine.h",
+    ],
+    linkshared = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/base:log_severity",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/log:initialize",
+        "@com_google_absl//absl/log:log_sink_registry",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/time",
+        "@nlohmann_json//:json",
+        "//runtime/conversation",
+        "//runtime/conversation:io_types",
+        "//runtime/core:engine_impl",
+        "//runtime/engine:engine_factory",
+        "//runtime/engine:engine_interface",
+        "//runtime/engine:engine_settings",
+        "//runtime/engine:io_types",
+        "//runtime/executor:executor_settings_base",
+        "//runtime/executor:llm_executor_settings",
+        "//runtime/proto:engine_cc_proto",
+        "//runtime/proto:llm_metadata_cc_proto",
+        "//runtime/proto:sampler_params_cc_proto",
+        "//runtime/proto:token_cc_proto",
+        "//runtime/util:logging",
+    ],
+)
+
 pytype_strict_library(
     name = "interfaces",
     srcs = ["interfaces.py"],
@@ -33,76 +72,75 @@ pytype_strict_library(
     deps = [":interfaces"],
 )
 
-cc_binary(
-    name = "litert_lm_ext.so",
-    srcs = ["litert_lm.cc"],
-    copts = [
-        "-fexceptions",
-        "-fvisibility=hidden",
-    ],
-    features = ["-use_header_modules"],
-    linkopts = select({
-        "@platforms//os:macos": ["-Wl,-undefined,dynamic_lookup"],
-        "//conditions:default": [
-            "-Wl,-Bsymbolic",
-            "-Wl,-rpath,'$$ORIGIN'",
-            # Marks the binary stack as non-executable. Required for
-            # compatibility with modern Linux kernels (NX/SELlinux) and to
-            # ensure the extension can be imported in restricted environments,
-            # like pip install (b/496655352).
-            "-Wl,-z,noexecstack",
-        ],
-    }),
-    linkshared = True,
-    tags = [
-        "noandroid",
-        "noios",
-        "nowindows",
-    ],
+pytype_strict_library(
+    name = "_ffi",
+    srcs = ["_ffi.py"],
+)
+
+pytype_strict_library(
+    name = "utils",
+    srcs = ["utils.py"],
     deps = [
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/base:log_severity",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/log:globals",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
-        "@nlohmann_json//:json",
-        "@nanobind",
-        "@nanobind_json",
-        "@litert//litert/c/internal:litert_logging",
-        "//runtime/components:tokenizer",
-        "//runtime/conversation",
-        "//runtime/conversation:io_types",
-        "//runtime/core:engine_impl",
-        "//runtime/engine:engine_factory",
-        "//runtime/engine:engine_interface",
-        "//runtime/engine:engine_settings",
-        "//runtime/engine:io_types",
-        "//runtime/executor:executor_settings_base",
-        "//runtime/executor:llm_executor_settings",
-        "//runtime/proto:token_cc_proto",
-        "//runtime/util:logging",
-        "@rules_python//python/cc:current_py_cc_headers",  # buildcleaner: keep
-        "@litert//tflite:minimal_logging",
+        ":_ffi",
+        ":interfaces",
+    ],
+)
+
+pytype_strict_library(
+    name = "session",
+    srcs = ["session.py"],
+    deps = [
+        ":_ffi",
+        ":interfaces",
+    ],
+)
+
+pytype_strict_library(
+    name = "conversation",
+    srcs = ["conversation.py"],
+    deps = [
+        ":_ffi",
+        ":interfaces",
+    ],
+)
+
+pytype_strict_library(
+    name = "engine",
+    srcs = ["engine.py"],
+    deps = [
+        ":_ffi",
+        ":conversation",
+        ":interfaces",
+        ":session",
+        ":tools",
+        ":utils",
+    ],
+)
+
+pytype_strict_library(
+    name = "benchmark",
+    srcs = ["benchmark.py"],
+    deps = [
+        ":_ffi",
+        ":interfaces",
     ],
 )
 
 pytype_strict_library(
     name = "litert_lm",
-    srcs = [
-        "__init__.py",
-        "litert_lm_ext.py",
-    ],
-    data = [":litert_lm_ext.so"] + select({
+    srcs = ["__init__.py"],
+    data = ["//python/litert_lm:litert-lm"] + select({
         "@platforms//os:macos": [":copy_prebuilt_libs_dylib"],
         "@platforms//os:windows": [], # the cc_binary rule already properly provisions this DLL into the package directory on Windows.
         "//conditions:default": [":copy_prebuilt_libs_so"],
     }),
     deps = [
+        ":_ffi",
+        ":benchmark",
+        ":conversation",
+        ":engine",
         ":interfaces",
+        ":session",
         ":tools",
     ],
 )

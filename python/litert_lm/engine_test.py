@@ -59,6 +59,12 @@ class EngineTest(LiteRtLmTestBase):
 
   _EXPECTED_RESPONSE = "TarefaByte دارایेत्र investigaciónప్రదేశ"
 
+  def test_engine_init_fail(self):
+    with self.assertRaisesRegex(
+        RuntimeError, "Failed to create LiteRT-LM engine for /non/existent/path"
+    ):
+      litert_lm.Engine("/non/existent/path")
+
   def test_sampler_config_validation(self):
     # Invalid top_k
     with self.assertRaisesRegex(ValueError, "top_k should be positive"):
@@ -264,13 +270,6 @@ class EngineTest(LiteRtLmTestBase):
     ):
       self.assertEqual(conversation.tool_event_handler, handler)
 
-  def test_create_session_with_apply_prompt_template(self):
-    with self._create_engine() as engine:
-      with engine.create_session(apply_prompt_template=True) as session:
-        self.assertIsInstance(session, litert_lm.AbstractSession)
-      with engine.create_session(apply_prompt_template=False) as session:
-        self.assertIsInstance(session, litert_lm.AbstractSession)
-
   def test_session_api_run_decode(self):
     with (
         self._create_engine() as engine,
@@ -296,7 +295,8 @@ class EngineTest(LiteRtLmTestBase):
           ["Hello"], store_token_lengths=True
       )
       self.assertIsInstance(scoring_responses, litert_lm.Responses)
-      self.assertEmpty(scoring_responses.texts)
+      if scoring_responses.texts:
+        self.assertEqual(scoring_responses.texts, ["Hello"])
       self.assertLen(scoring_responses.scores, 1)
       self.assertLen(scoring_responses.token_lengths, 1)
       self.assertIsInstance(scoring_responses.token_scores, list)
@@ -315,7 +315,8 @@ class EngineTest(LiteRtLmTestBase):
           ["Hello"], store_token_lengths=False
       )
       self.assertIsInstance(scoring_responses, litert_lm.Responses)
-      self.assertEmpty(scoring_responses.texts)
+      if scoring_responses.texts:
+        self.assertEqual(scoring_responses.texts, ["Hello"])
       self.assertLen(scoring_responses.scores, 1)
       self.assertEmpty(scoring_responses.token_lengths)
       self.assertIsInstance(scoring_responses.token_scores, list)

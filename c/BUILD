@@ -24,6 +24,11 @@ package(
 
 licenses(["notice"])
 
+exports_files([
+    "engine.cc",
+    "engine.h",
+])
+
 ENGINE_COMMON_DEPS = [
     "@com_google_absl//absl/base:core_headers",
     "@com_google_absl//absl/base:log_severity",

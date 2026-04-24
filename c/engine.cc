@@ -549,6 +549,21 @@ LiteRtLmResponses* litert_lm_session_run_decode(LiteRtLmSession* session) {
   return new LiteRtLmResponses{std::move(*responses)};
 }
 
+int litert_lm_session_run_decode_async(LiteRtLmSession* session,
+                                       LiteRtLmStreamCallback callback,
+                                       void* callback_data) {
+  if (!session || !session->session) {
+    return -1;
+  }
+  auto status =
+      session->session->RunDecodeAsync(CreateCallback(callback, callback_data));
+  if (!status.ok()) {
+    ABSL_LOG(ERROR) << "Failed to start decode stream: " << status.status();
+    return static_cast<int>(status.status().code());
+  }
+  return 0;
+}
+
 LiteRtLmResponses* litert_lm_session_generate_content(
     LiteRtLmSession* session, const LiteRtLmInputData* inputs,
     size_t num_inputs) {
