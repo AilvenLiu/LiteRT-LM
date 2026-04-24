@@ -263,6 +263,13 @@ absl::Status MainHelper(int argc, char** argv) {
   settings.use_submodel = absl::GetFlag(FLAGS_use_submodel);
   settings.enable_speculative_decoding =
       absl::GetFlag(FLAGS_enable_speculative_decoding);
+  settings.enable_neon_for_npu_greedy_sampling =
+      absl::GetFlag(FLAGS_enable_neon_for_npu_greedy_sampling);
+  settings.use_hw_masking_for_npu = absl::GetFlag(FLAGS_use_hw_masking_for_npu);
+  settings.use_hw_cache_update_for_npu =
+      absl::GetFlag(FLAGS_use_hw_cache_update_for_npu);
+  settings.enable_npu_debug_logging =
+      absl::GetFlag(FLAGS_enable_npu_debug_logging);
 
   // Adjust max_num_tokens and prefill_batch_size if not set on benchmark mode.
   if (settings.benchmark && settings.benchmark_prefill_tokens > 0) {

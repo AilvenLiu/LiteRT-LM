@@ -121,6 +121,10 @@ struct LiteRtLmSettings {
   std::string constraint_regex = "";
   bool use_submodel = false;
   bool enable_speculative_decoding = false;
+  bool enable_neon_for_npu_greedy_sampling = true;
+  bool use_hw_masking_for_npu = true;
+  bool use_hw_cache_update_for_npu = true;
+  bool enable_npu_debug_logging = false;
 };
 
 struct LitertLmMetrics {
