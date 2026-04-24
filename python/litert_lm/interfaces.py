@@ -304,6 +304,20 @@ class AbstractConversation(abc.ABC):
         response.
     """
 
+  @abc.abstractmethod
+  def render_message_to_string(
+      self, message: str | collections.abc.Mapping[str, Any]
+  ) -> str:
+    """Renders a message into a string according to the template.
+
+    Args:
+        message: The input message to render. Example: "Hello" or {"role":
+          "user", "content": "Hello"}.
+
+    Returns:
+        The rendered string.
+    """
+
   def cancel_process(self) -> None:
     """Cancels the current inference process."""
 

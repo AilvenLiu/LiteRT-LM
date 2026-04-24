@@ -951,7 +951,17 @@ NB_MODULE(litert_lm_ext, module) {
             }
             return iterator;
           },
-          nb::arg("message"));
+          nb::arg("message"))
+      .def(
+          "render_message_to_string",
+          [](Conversation& self, const nb::handle& message) {
+            nlohmann::json current_message = ParseMessage(message);
+            return VALUE_OR_THROW(
+                self.RenderMessageIntoString(current_message, OptionalArgs()));
+          },
+          nb::arg("message"),
+          "Renders the message into a string for testing and logging "
+          "purposes.");
   // Expose the MessageIterator to Python so that it can be used in a
   // standard `for chunk in stream:` loop. We bind Python's iterator protocol
   // (__iter__ and __next__) to our C++ implementation.
