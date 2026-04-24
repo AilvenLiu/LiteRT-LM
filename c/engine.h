@@ -145,18 +145,45 @@ void litert_lm_session_config_delete(LiteRtLmSessionConfig* config);
 // Creates a LiteRT LM Conversation Config.
 // The caller is responsible for destroying the config using
 // `litert_lm_conversation_config_delete`.
-// @param engine The engine to use.
-// @param session_config The session config to use. If NULL, default
-// session config will be used.
-// @param system_message_json The system message in JSON format.
-// @param tools_json The tools description in JSON array format.
-// @param enable_constrained_decoding Whether to enable constrained decoding.
 // @return A pointer to the created config, or NULL on failure.
 LITERT_LM_C_API_EXPORT
-LiteRtLmConversationConfig* litert_lm_conversation_config_create(
-    LiteRtLmEngine* engine, const LiteRtLmSessionConfig* session_config,
-    const char* system_message_json, const char* tools_json,
-    const char* messages_json, bool enable_constrained_decoding);
+LiteRtLmConversationConfig* litert_lm_conversation_config_create();
+
+// Sets the session config for this conversation config.
+// @param config The config to modify.
+// @param session_config The session config to use.
+LITERT_LM_C_API_EXPORT
+void litert_lm_conversation_config_set_session_config(
+    LiteRtLmConversationConfig* config,
+    const LiteRtLmSessionConfig* session_config);
+
+// Sets the system message for this conversation config.
+// @param config The config to modify.
+// @param system_message_json The system message in JSON format.
+LITERT_LM_C_API_EXPORT
+void litert_lm_conversation_config_set_system_message(
+    LiteRtLmConversationConfig* config, const char* system_message_json);
+
+// Sets the tools for this conversation config.
+// @param config The config to modify.
+// @param tools_json The tools description in JSON array format.
+LITERT_LM_C_API_EXPORT
+void litert_lm_conversation_config_set_tools(LiteRtLmConversationConfig* config,
+                                             const char* tools_json);
+
+// Sets the initial messages for this conversation config.
+// @param config The config to modify.
+// @param messages_json The initial messages in JSON array format.
+LITERT_LM_C_API_EXPORT
+void litert_lm_conversation_config_set_messages(
+    LiteRtLmConversationConfig* config, const char* messages_json);
+
+// Sets whether to enable constrained decoding for this conversation config.
+// @param config The config to modify.
+// @param enable_constrained_decoding Whether to enable constrained decoding.
+LITERT_LM_C_API_EXPORT
+void litert_lm_conversation_config_set_enable_constrained_decoding(
+    LiteRtLmConversationConfig* config, bool enable_constrained_decoding);
 
 // Destroys a LiteRT LM Conversation Config.
 // @param config The config to destroy.
