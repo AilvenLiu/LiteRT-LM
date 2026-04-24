@@ -112,6 +112,20 @@ static constexpr KVCacheUpdateMethod kPrefillKVCacheUpdateMethod =
 static constexpr KVCacheUpdateMethod kDecodeKVCacheUpdateMethod =
     KVCacheUpdateMethod::kModel;
 
+enum class MaskUpdateMethod {
+  kModel,
+  kWH,
+};
+
+static constexpr MaskUpdateMethod kPrefillMaskUpdateMethod =
+    MaskUpdateMethod::kModel;
+static constexpr MaskUpdateMethod kDecodeMaskUpdateMethod =
+    MaskUpdateMethod::kModel;
+static constexpr MaskUpdateMethod kMtpMaskUpdateMethod =
+    MaskUpdateMethod::kModel;
+static constexpr MaskUpdateMethod kVerifyMaskUpdateMethod =
+    MaskUpdateMethod::kModel;
+
 }  // namespace
 
 constexpr bool kEnableDecodingDebugLogging = false;
@@ -1889,10 +1903,16 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::PrefillInternal(
   // Invoke mask signature.
   {
     auto start = absl::Now();
-    auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
-        MaskSignatures::kPrefillMask, mask_context_.prefill_input_buffers,
-        mask_context_.prefill_output_buffers);
-    RET_CHECK(res) << "Failed to run compiled model." << res.Error().Message();
+    if (kPrefillMaskUpdateMethod == MaskUpdateMethod::kWH) {
+      RETURN_IF_ERROR(HWMaskUpdate(mask_context_.prefill_input_buffers,
+                                   mask_context_.prefill_output_buffers));
+    } else {
+      auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
+          MaskSignatures::kPrefillMask, mask_context_.prefill_input_buffers,
+          mask_context_.prefill_output_buffers);
+      RET_CHECK(res) << "Failed to run compiled model."
+                     << res.Error().Message();
+    }
     auto end = absl::Now();
     latency_stats_.prefill_mask_inference_latency_us +=
         absl::ToInt64Microseconds(end - start);
@@ -2045,10 +2065,16 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::DecodeInternal(
   // Invoke mask signature.
   {
     auto start = absl::Now();
-    auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
-        MaskSignatures::kDecodeMask, mask_context_.decode_input_buffers,
-        mask_context_.decode_output_buffers);
-    RET_CHECK(res) << "Failed to run compiled model." << res.Error().Message();
+    if (kDecodeMaskUpdateMethod == MaskUpdateMethod::kWH) {
+      RETURN_IF_ERROR(HWMaskUpdate(mask_context_.decode_input_buffers,
+                                   mask_context_.decode_output_buffers));
+    } else {
+      auto res = npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
+          MaskSignatures::kDecodeMask, mask_context_.decode_input_buffers,
+          mask_context_.decode_output_buffers);
+      RET_CHECK(res) << "Failed to run compiled model."
+                     << res.Error().Message();
+    }
     auto end = absl::Now();
     latency_stats_.decode_mask_inference_latency_us +=
         absl::ToInt64Microseconds(end - start);
@@ -2163,9 +2189,14 @@ LlmLiteRtNpuCompiledModelExecutor::RunDrafterLoop(int start_step,
       absl::ToInt64Microseconds(end - start);
 
   start = absl::Now();
-  LITERT_RETURN_IF_ERROR(aux_ctx.mtp_aux_compiled_model.Run(
-      MtpSignatures::kMtpMask, aux_ctx.mask_input_buffers,
-      aux_ctx.mask_output_buffers));
+  if (kMtpMaskUpdateMethod == MaskUpdateMethod::kWH) {
+    RETURN_IF_ERROR(
+        HWMaskUpdate(aux_ctx.mask_input_buffers, aux_ctx.mask_output_buffers));
+  } else {
+    LITERT_RETURN_IF_ERROR(aux_ctx.mtp_aux_compiled_model.Run(
+        MtpSignatures::kMtpMask, aux_ctx.mask_input_buffers,
+        aux_ctx.mask_output_buffers));
+  }
   end = absl::Now();
   latency_stats_.decode_mask_inference_latency_us +=
       absl::ToInt64Microseconds(end - start);
@@ -2426,10 +2457,15 @@ absl::Status LlmLiteRtNpuCompiledModelExecutor::RunVerifierBatch(
       npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
           RopeSignatures::kVerifyRope, rope_context_.verify_input_buffers,
           rope_context_.verify_output_buffers));
-  LITERT_RETURN_IF_ERROR(
-      npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
-          MaskSignatures::kVerifyMask, mask_context_.verify_input_buffers,
-          mask_context_.verify_output_buffers));
+  if (kVerifyMaskUpdateMethod == MaskUpdateMethod::kWH) {
+    LITERT_RETURN_IF_ERROR(HWMaskUpdate(mask_context_.verify_input_buffers,
+                                        mask_context_.verify_output_buffers));
+  } else {
+    LITERT_RETURN_IF_ERROR(
+        npu_auxiliary_context_.npu_auxiliary_compiled_model.Run(
+            MaskSignatures::kVerifyMask, mask_context_.verify_input_buffers,
+            mask_context_.verify_output_buffers));
+  }
 
   LITERT_RETURN_IF_ERROR(llm_compiled_model_.Run(
       LlmSignatures::kVerifyLlm, llm_inference_context_.verify_input_buffers,

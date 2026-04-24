@@ -246,7 +246,6 @@ TEST_F(ExecutorUtilsTest, HWKVCacheUpdateTransposedInt8) {
   // Tests the path where last_dim_matches == false (transposed layout)
   int hidden_dim = 32;  // multiple of 16 for NEON
   int cache_seq = 64;
-  int slice_seq = 1;
   int start_pos = 5;
 
   std::vector<int8_t> cache_data(hidden_dim * cache_seq, 0);
@@ -265,10 +264,10 @@ TEST_F(ExecutorUtilsTest, HWKVCacheUpdateTransposedInt8) {
                                                 {1, hidden_dim, cache_seq}));
   in_buffers.emplace("kv_slice_k_0",
                      CreateTensorBufferWithDims(slice_data, ElementType::Int8,
-                                                {1, 1, slice_seq, hidden_dim}));
+                                                {1, 1, 1, hidden_dim}));
   in_buffers.emplace("kv_slice_v_0",
                      CreateTensorBufferWithDims(slice_data, ElementType::Int8,
-                                                {1, 1, slice_seq, hidden_dim}));
+                                                {1, 1, 1, hidden_dim}));
 
   absl::flat_hash_map<absl::string_view, TensorBuffer> out_buffers;
 
@@ -285,7 +284,6 @@ TEST_F(ExecutorUtilsTest, HWKVCacheUpdateTransposedInt8) {
 TEST_F(ExecutorUtilsTest, HWKVCacheUpdateTransposedInt16) {
   int hidden_dim = 16;  // multiple of 8 for NEON
   int cache_seq = 32;
-  int slice_seq = 1;
   int start_pos = 10;
 
   std::vector<int16_t> cache_data(hidden_dim * cache_seq, 0);
@@ -304,10 +302,10 @@ TEST_F(ExecutorUtilsTest, HWKVCacheUpdateTransposedInt16) {
                                                 {1, hidden_dim, cache_seq}));
   in_buffers.emplace("kv_slice_k_0",
                      CreateTensorBufferWithDims(slice_data, ElementType::Int16,
-                                                {1, 1, slice_seq, hidden_dim}));
+                                                {1, 1, 1, hidden_dim}));
   in_buffers.emplace("kv_slice_v_0",
                      CreateTensorBufferWithDims(slice_data, ElementType::Int16,
-                                                {1, 1, slice_seq, hidden_dim}));
+                                                {1, 1, 1, hidden_dim}));
 
   absl::flat_hash_map<absl::string_view, TensorBuffer> out_buffers;
 
@@ -402,6 +400,182 @@ TEST_F(ExecutorUtilsTest, HWKVCacheUpdateGemma3nPrefill) {
                 slice_data[h * slice_seq + s]);
     }
   }
+}
+
+TEST_F(ExecutorUtilsTest, HWMaskUpdateInt8) {
+  int seq_q = 1;
+  int seq_k = 4096 + 4;  // capacity + batch
+  int time_step = 100;
+  int8_t valid_val = 127;
+  int8_t masked_val = -128;
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> in_buffers;
+  std::vector<int32_t> time_step_data = {time_step};
+  in_buffers.emplace("time_step",
+                     CreateTensorBuffer(time_step_data, ElementType::Int32));
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> out_buffers;
+  std::vector<int8_t> mask_data(seq_q * seq_k, 0);
+  out_buffers.emplace("mask_local",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int8,
+                                                 {1, seq_q, seq_k}));
+  out_buffers.emplace("mask_global",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int8,
+                                                 {1, seq_q, seq_k}));
+
+  ASSERT_TRUE(HWMaskUpdate(in_buffers, out_buffers).ok());
+
+  auto local_lock_expected = TensorBufferScopedLock::Create<int8_t>(
+      out_buffers.at("mask_local"), TensorBuffer::LockMode::kRead);
+  auto global_lock_expected = TensorBufferScopedLock::Create<int8_t>(
+      out_buffers.at("mask_global"), TensorBuffer::LockMode::kRead);
+  auto& local_lock = *local_lock_expected;
+  auto& global_lock = *global_lock_expected;
+
+  // Check KV cache part (0 to 4095)
+  for (int k = 0; k < 4096; ++k) {
+    if (k < time_step) {
+      EXPECT_EQ(global_lock.second[k], valid_val) << "k=" << k;
+      if (k >= time_step - 511) {
+        EXPECT_EQ(local_lock.second[k], valid_val) << "k=" << k;
+      } else {
+        EXPECT_EQ(local_lock.second[k], masked_val) << "k=" << k;
+      }
+    } else {
+      EXPECT_EQ(global_lock.second[k], masked_val) << "k=" << k;
+      EXPECT_EQ(local_lock.second[k], masked_val) << "k=" << k;
+    }
+  }
+}
+
+TEST_F(ExecutorUtilsTest, HWMaskUpdateInt16) {
+  int seq_q = 4;  // Verify case
+  int seq_k = 4096 + 4;
+  int time_step = 2000;
+  int16_t valid_val = 0;
+  int16_t masked_val = -32767;
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> in_buffers;
+  std::vector<int32_t> time_step_data = {time_step};
+  in_buffers.emplace("time_step",
+                     CreateTensorBuffer(time_step_data, ElementType::Int32));
+  std::vector<int32_t> tokens_data = {1, 2, 3, -1};  // last token is invalid
+  in_buffers.emplace("input_tokens",
+                     CreateTensorBuffer(tokens_data, ElementType::Int32));
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> out_buffers;
+  std::vector<int16_t> mask_data(seq_q * seq_k, 0);
+  out_buffers.emplace("mask_local",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int16,
+                                                 {1, seq_q, seq_k}));
+  out_buffers.emplace("mask_global",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int16,
+                                                 {1, seq_q, seq_k}));
+
+  ASSERT_TRUE(HWMaskUpdate(in_buffers, out_buffers).ok());
+
+  auto local_lock_expected = TensorBufferScopedLock::Create<int16_t>(
+      out_buffers.at("mask_local"), TensorBuffer::LockMode::kRead);
+  auto global_lock_expected = TensorBufferScopedLock::Create<int16_t>(
+      out_buffers.at("mask_global"), TensorBuffer::LockMode::kRead);
+  auto& local_lock = *local_lock_expected;
+  auto& global_lock = *global_lock_expected;
+
+  for (int q = 0; q < seq_q; ++q) {
+    // Check batch part (4096 to 4099)
+    for (int k_rel = 0; k_rel < 4; ++k_rel) {
+      int k = 4096 + k_rel;
+      if (k_rel <= q && tokens_data[k_rel] != -1) {
+        EXPECT_EQ(global_lock.second[q * seq_k + k], valid_val)
+            << "q=" << q << " k=" << k;
+        EXPECT_EQ(local_lock.second[q * seq_k + k], valid_val)
+            << "q=" << q << " k=" << k;
+      } else {
+        EXPECT_EQ(global_lock.second[q * seq_k + k], masked_val)
+            << "q=" << q << " k=" << k;
+        EXPECT_EQ(local_lock.second[q * seq_k + k], masked_val)
+            << "q=" << q << " k=" << k;
+      }
+    }
+  }
+}
+
+TEST_F(ExecutorUtilsTest, HWMaskUpdateGemma3Prefill) {
+  // Gemma 3 Prefill: capacity 1280, prefill 128 -> seq_k = 1408
+  int seq_q = 128;
+  int seq_k = 1408;
+  int time_step = 0;  // First prefill
+  int8_t valid_val = 127;
+  int8_t masked_val = -128;
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> in_buffers;
+  std::vector<int32_t> time_step_data = {time_step};
+  in_buffers.emplace("time_step",
+                     CreateTensorBuffer(time_step_data, ElementType::Int32));
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> out_buffers;
+  std::vector<int8_t> mask_data(seq_q * seq_k, 0);
+  out_buffers.emplace("mask_local",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int8,
+                                                 {1, seq_q, seq_k}));
+  out_buffers.emplace("mask_global",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int8,
+                                                 {1, seq_q, seq_k}));
+
+  ASSERT_TRUE(HWMaskUpdate(in_buffers, out_buffers).ok());
+
+  auto global_lock_expected = TensorBufferScopedLock::Create<int8_t>(
+      out_buffers.at("mask_global"), TensorBuffer::LockMode::kRead);
+  auto& global_lock = *global_lock_expected;
+
+  // Capacity 1280.
+  // Draft part should start at 1280.
+  // For prefill chunk, token q attends to tokens 0..q within the chunk.
+  int q = 10;
+  int k_chunk = 5;
+  int k_global = 1280 + k_chunk;
+  EXPECT_EQ(global_lock.second[q * seq_k + k_global], valid_val)
+      << "q=" << q << " k=" << k_global;
+
+  k_chunk = 15;
+  k_global = 1280 + k_chunk;
+  EXPECT_EQ(global_lock.second[q * seq_k + k_global], masked_val)
+      << "q=" << q << " k=" << k_global;
+}
+
+TEST_F(ExecutorUtilsTest, HWMaskUpdateGemma3Decode) {
+  // Gemma 3 Decode: capacity 1280, batch 1 -> seq_k = 1281
+  int seq_q = 1;
+  int seq_k = 1281;
+  int time_step = 500;
+  int8_t valid_val = 127;
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> in_buffers;
+  std::vector<int32_t> time_step_data = {time_step};
+  in_buffers.emplace("time_step",
+                     CreateTensorBuffer(time_step_data, ElementType::Int32));
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> out_buffers;
+  std::vector<int8_t> mask_data(seq_q * seq_k, 0);
+  out_buffers.emplace("mask_local",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int8,
+                                                 {1, seq_q, seq_k}));
+  out_buffers.emplace("mask_global",
+                      CreateTensorBufferWithDims(mask_data, ElementType::Int8,
+                                                 {1, seq_q, seq_k}));
+
+  ASSERT_TRUE(HWMaskUpdate(in_buffers, out_buffers).ok());
+
+  auto global_lock_expected = TensorBufferScopedLock::Create<int8_t>(
+      out_buffers.at("mask_global"), TensorBuffer::LockMode::kRead);
+  auto& global_lock = *global_lock_expected;
+
+  // Check KV cache part
+  EXPECT_EQ(global_lock.second[100], valid_val);
+  EXPECT_EQ(global_lock.second[600], -128);
+
+  // Check new token part (at index 1280)
+  EXPECT_EQ(global_lock.second[1280], valid_val);
 }
 
 }  // namespace
