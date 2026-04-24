@@ -160,7 +160,7 @@ LlmLiteRtMtpDrafter::~LlmLiteRtMtpDrafter() {
 absl::StatusOr<std::unique_ptr<LlmLiteRtMtpDrafter>>
 LlmLiteRtMtpDrafter::Create(Environment& env, ModelResources& resources,
                             const LlmExecutorSettings& executor_settings,
-                            CompiledModel base_model,
+                            CompiledModel& base_model,
                             EmbeddingLookupManager& embedding_manager,
                             EmbeddingLookupManager& ple_manager) {
   ActivationDataType activation_data_type =
@@ -262,11 +262,10 @@ LlmLiteRtMtpDrafter::Create(Environment& env, ModelResources& resources,
       CreateTensorBuffer<int32_t>({1, num_draft_steps + 1}));
 
   auto drafter = absl::WrapUnique(new LlmLiteRtMtpDrafter(
-      std::move(compiled_model), std::move(base_model),
-      std::move(drafter_signature), std::move(verify_signature),
-      embedding_manager, ple_manager, std::move(drafter_sampler),
-      std::move(verifier_sampler), std::move(kv_cache_input_names),
-      std::move(mtp_drafter_input_buffers),
+      std::move(compiled_model), std::move(drafter_signature), base_model,
+      std::move(verify_signature), embedding_manager, ple_manager,
+      std::move(drafter_sampler), std::move(verifier_sampler),
+      std::move(kv_cache_input_names), std::move(mtp_drafter_input_buffers),
       std::move(mtp_drafter_output_buffers), std::move(verifier_input_buffers),
       std::move(verifier_output_buffers), num_draft_steps));
 
