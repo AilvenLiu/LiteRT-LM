@@ -2875,6 +2875,7 @@ LlmLiteRtNpuCompiledModelExecutor::CreateForModelHasPerLayerEmbedding(
     }
   }
 
+
   auto executor = absl::WrapUnique(new LlmLiteRtNpuCompiledModelExecutor(
       executor_settings, env, std::move(embedder_context),
       std::move(npu_auxiliary_context), std::move(mask_context),
