@@ -458,23 +458,33 @@ absl::Status GenericComputeTokenEmbeddings(
 }
 
 absl::Status SetCpuCacheOptions(
-    const absl::StatusOr<std::string>& weight_cache_file,
-    std::shared_ptr<litert::lm::ScopedFile> scoped_cache_file,
+    const absl::StatusOr<
+        std::variant<std::string, std::shared_ptr<litert::lm::ScopedFile>>>&
+        weight_cache_file,
     absl::string_view logging_prefix,
     litert::CpuOptions& cpu_options) {
-  if (scoped_cache_file != nullptr) {
-    ASSIGN_OR_RETURN(auto duplicated, scoped_cache_file->Duplicate());
-    ASSIGN_OR_RETURN(int fd, duplicated.Release());
-    cpu_options.SetXNNPackWeightCacheFileDescriptor(fd);
-    ABSL_LOG(INFO) << logging_prefix
-                   << " use provided cache file descriptor: " << fd;
-  } else if (weight_cache_file.ok()) {
-    const std::string& weight_cache_path = *weight_cache_file;
+  if (!weight_cache_file.ok()) {
+    ABSL_LOG(INFO) << logging_prefix << " does not use cache.";
+    return absl::OkStatus();
+  }
+
+  if (std::holds_alternative<std::shared_ptr<litert::lm::ScopedFile>>(
+          *weight_cache_file)) {
+    auto scoped_cache_file =
+        std::get<std::shared_ptr<litert::lm::ScopedFile>>(*weight_cache_file);
+    if (scoped_cache_file != nullptr) {
+      ASSIGN_OR_RETURN(auto duplicated, scoped_cache_file->Duplicate());
+      ASSIGN_OR_RETURN(int fd, duplicated.Release());
+      cpu_options.SetXNNPackWeightCacheFileDescriptor(fd);
+      ABSL_LOG(INFO) << logging_prefix
+                     << " use provided cache file descriptor: " << fd;
+    }
+  } else if (std::holds_alternative<std::string>(*weight_cache_file)) {
+    const std::string& weight_cache_path =
+        std::get<std::string>(*weight_cache_file);
     cpu_options.SetXNNPackWeightCachePath(weight_cache_path.c_str());
     ABSL_LOG(INFO) << logging_prefix
                    << " use cache path: " << weight_cache_path;
-  } else {
-    ABSL_LOG(INFO) << logging_prefix << " does not use cache.";
   }
   return absl::OkStatus();
 }

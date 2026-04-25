@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <gmock/gmock.h>
@@ -597,8 +598,9 @@ TEST(LlmLiteRTCompiledModelExecutorUtilsTest,
                        ScopedFile::OpenWritable(test_file_path));
   auto scoped_file_ptr = std::make_shared<ScopedFile>(std::move(scoped_file));
 
-  ASSERT_OK(SetCpuCacheOptions("weight_cache.bin", scoped_file_ptr,
-                               "test_prefix", cpu_options));
+  std::variant<std::string, std::shared_ptr<litert::lm::ScopedFile>>
+      weight_cache = scoped_file_ptr;
+  ASSERT_OK(SetCpuCacheOptions(weight_cache, "test_prefix", cpu_options));
 
   auto fd_expected = cpu_options.GetXNNPackWeightCacheFileDescriptor();
   ASSERT_TRUE(fd_expected.HasValue());
@@ -610,8 +612,9 @@ TEST(LlmLiteRTCompiledModelExecutorUtilsTest,
   LITERT_ASSERT_OK_AND_ASSIGN(auto env, ::litert::Environment::Create({}));
   LITERT_ASSERT_OK_AND_ASSIGN(auto cpu_options, ::litert::CpuOptions::Create());
 
-  ASSERT_OK(SetCpuCacheOptions("weight_cache.bin", nullptr, "test_prefix",
-                               cpu_options));
+  std::variant<std::string, std::shared_ptr<litert::lm::ScopedFile>>
+      weight_cache = "weight_cache.bin";
+  ASSERT_OK(SetCpuCacheOptions(weight_cache, "test_prefix", cpu_options));
 
   auto path_expected = cpu_options.GetXNNPackWeightCachePath();
   ASSERT_TRUE(path_expected.HasValue());
@@ -622,7 +625,7 @@ TEST(LlmLiteRTCompiledModelExecutorUtilsTest, SetCpuCacheOptions_WithoutCache) {
   LITERT_ASSERT_OK_AND_ASSIGN(auto env, ::litert::Environment::Create({}));
   LITERT_ASSERT_OK_AND_ASSIGN(auto cpu_options, ::litert::CpuOptions::Create());
 
-  ASSERT_OK(SetCpuCacheOptions(absl::NotFoundError("No cache file"), nullptr,
+  ASSERT_OK(SetCpuCacheOptions(absl::NotFoundError("No cache file"),
                                "test_prefix", cpu_options));
 
   auto path_expected = cpu_options.GetXNNPackWeightCachePath();

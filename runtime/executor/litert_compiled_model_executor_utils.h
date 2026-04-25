@@ -156,8 +156,9 @@ absl::Status GenericComputeTokenEmbeddings(
 //   - logging_prefix: A prefix string for logging information.
 //   - cpu_options: The CpuOptions reference to apply the settings to.
 absl::Status SetCpuCacheOptions(
-    const absl::StatusOr<std::string>& weight_cache_file,
-    std::shared_ptr<litert::lm::ScopedFile> scoped_cache_file,
+    const absl::StatusOr<
+        std::variant<std::string, std::shared_ptr<litert::lm::ScopedFile>>>&
+        weight_cache_file,
     absl::string_view logging_prefix,
     litert::CpuOptions& cpu_options);
 

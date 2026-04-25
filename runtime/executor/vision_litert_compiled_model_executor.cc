@@ -202,7 +202,9 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionEncoder::Initialize() {
   // TODO(b/405424188): - Add support for NPU backends.
   LITERT_ASSIGN_OR_RETURN(auto options, Options::Create());
   auto weight_cache_file = vision_executor_settings_.GetWeightCacheFile(
-      ".vision_encoder.xnnpack_cache");
+      absl::StrCat(VisionExecutorSettings::kEncoderName,
+                   ExecutorSettingsBase::kXnnpackCacheSuffix),
+      /*check_and_clean=*/true);
   std::string weight_cache_path = vision_executor_settings_.GetCacheDir();
   auto activation_data_type = ActivationDataType::FLOAT16;
   if (vision_executor_settings_.GetActivationDataType().has_value()) {
@@ -215,11 +217,10 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionEncoder::Initialize() {
       LITERT_ASSIGN_OR_RETURN(auto& cpu_options, options.GetCpuOptions());
       // Set the number of threads to 4 by default.
       cpu_options.SetNumThreads(4);
-      std::shared_ptr<ScopedFile> scoped_encoder_cache_file =
-          vision_executor_settings_.GetScopedEncoderCacheFile();
-      RETURN_IF_ERROR(SetCpuCacheOptions(weight_cache_file,
-                                         scoped_encoder_cache_file,
-                                         "vision_encoder", cpu_options));
+      RETURN_IF_ERROR(SetCpuCacheOptions(
+          weight_cache_file,
+          /*logging_prefix=*/VisionExecutorSettings::kEncoderName,
+          cpu_options));
       options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);
       break;
     }
@@ -229,12 +230,21 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionEncoder::Initialize() {
       ASSIGN_OR_RETURN(auto model_path,
                        vision_executor_settings_.GetModelAssets().GetPath());
       absl::string_view model_basename = Basename(model_path);
+      LITERT_ASSIGN_OR_RETURN(std::string metadata_id,
+                                GetFileCacheIdentifier(model_path));
+      std::string cache_key =
+          absl::StrCat(model_basename, VisionExecutorSettings::kEncoderName,
+                       "_", metadata_id);
+      ABSL_LOG(INFO) << "Vision cache key: " << cache_key;
       auto program_cache_file = vision_executor_settings_.GetProgramCacheFile(
-          ".mldrift_program_cache.vision_encoder.bin");
+          absl::StrCat(VisionExecutorSettings::kEncoderName,
+                       ExecutorSettingsBase::kMlDriftCacheSuffix),
+          /*check_and_clean=*/true);
       RETURN_IF_ERROR(SetGpuOptions(vision_executor_settings_, gpu_options));
       RETURN_IF_ERROR(SetGpuCacheOptions(
           weight_cache_path, program_cache_file, vision_executor_settings_,
-          absl::StrCat(model_basename, ".vision_encoder"), "vision_encoder",
+          cache_key,
+          /*logging_prefix=*/VisionExecutorSettings::kEncoderName,
           gpu_options));
       options.SetHardwareAccelerators(litert::HwAccelerators::kGpu);
       break;
@@ -284,7 +294,9 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionAdapter::Initialize() {
   // TODO(b/405424188): - Add support for NPU backends.
   LITERT_ASSIGN_OR_RETURN(auto options, Options::Create());
   auto weight_cache_file = vision_executor_settings_.GetWeightCacheFile(
-      ".vision_adapter.xnnpack_cache");
+      absl::StrCat(VisionExecutorSettings::kAdapterName,
+                   ExecutorSettingsBase::kXnnpackCacheSuffix),
+      /*check_and_clean=*/true);
   std::string weight_cache_path = vision_executor_settings_.GetCacheDir();
   switch (backend_) {
     case Backend::CPU: {
@@ -292,11 +304,9 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionAdapter::Initialize() {
       LITERT_ASSIGN_OR_RETURN(auto& cpu_options, options.GetCpuOptions());
       // Set the number of threads to 4 by default.
       cpu_options.SetNumThreads(4);
-      std::shared_ptr<ScopedFile> scoped_adapter_cache_file =
-          vision_executor_settings_.GetScopedAdapterCacheFile();
       RETURN_IF_ERROR(SetCpuCacheOptions(weight_cache_file,
-                                         scoped_adapter_cache_file,
-                                         "vision_adapter", cpu_options));
+                                         VisionExecutorSettings::kAdapterName,
+                                         cpu_options));
       options.SetHardwareAccelerators(litert::HwAccelerators::kCpu);
       break;
     }
