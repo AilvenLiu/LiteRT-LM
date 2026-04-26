@@ -86,7 +86,7 @@ export UV_INDEX_URL=https://pypi.org/simple
 uv build
 
 # Verify CLI works
-uv tool install dist/litert_lm_builder-*.whl
+uv tool install dist/*.whl
 litert-lm-builder --help
 litert-lm-peek --help
 
@@ -96,7 +96,7 @@ cd ${STAGING_DIR}/test_venv
 uv venv
 source .venv/bin/activate
 
-uv pip install ${STAGING_DIR}/dist/litert_lm_builder-*.whl
+uv pip install ${STAGING_DIR}/dist/*.whl
 
 # Verify successful import
 python3 -c "import litert_lm_builder; print(litert_lm_builder.LitertLmFileBuilder)"
