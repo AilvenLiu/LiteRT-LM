@@ -116,6 +116,8 @@ absl::Status SetGpuOptions(
 #endif  // !__APPLE__
   gpu_options.SetMadviseOriginalSharedTensors(true);
   gpu_options.SetConvertWeightsOnGpu(true);
+  gpu_options.SetHintFullyDelegatedToSingleDelegate(true);
+  gpu_options.EnableInfiniteFloatCapping(true);
   gpu_options.SetModelCacheKey(cache_key.data());
   std::string cache_path = weight_cache_path;
   bool serialization_dir_set = false;
