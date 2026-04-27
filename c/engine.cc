@@ -474,8 +474,8 @@ LiteRtLmEngine* litert_lm_engine_create(
     return nullptr;
   }
 
-  absl::StatusOr<std::unique_ptr<Engine>> engine;
-    engine = EngineFactory::CreateDefault(*settings->settings);
+  absl::StatusOr<std::unique_ptr<Engine>> engine =
+      EngineFactory::CreateDefault(*settings->settings);
 
   if (!engine.ok()) {
     ABSL_LOG(ERROR) << "Failed to create engine: " << engine.status();

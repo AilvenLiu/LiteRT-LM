@@ -323,13 +323,7 @@ Speculative decoding mode ("auto", "true", "false").
   )(f)
   f = click.option(
       "--backend",
-      type=click.Choice(
-          [
-              "cpu",
-              "gpu",
-          ],
-          case_sensitive=False,
-      ),
+      type=click.Choice(["cpu", "gpu"], case_sensitive=False),
       default="cpu",
       help="The backend to use.",
   )(f)
@@ -466,27 +460,13 @@ def benchmark(
 )
 @click.option(
     "--vision-backend",
-    type=click.Choice(
-        [
-            "cpu",
-            "gpu",
-            "",
-        ],
-        case_sensitive=False,
-    ),
+    type=click.Choice(["cpu", "gpu", ""], case_sensitive=False),
     default=None,
     help="The backend to use for vision encoding.",
 )
 @click.option(
     "--audio-backend",
-    type=click.Choice(
-        [
-            "cpu",
-            "gpu",
-            "",
-        ],
-        case_sensitive=False,
-    ),
+    type=click.Choice(["cpu", "gpu", ""], case_sensitive=False),
     default=None,
     help="The backend to use for audio encoding.",
 )
