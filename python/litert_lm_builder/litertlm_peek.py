@@ -102,7 +102,7 @@ def read_litertlm_header(
   """
   with litertlm_core.open_file(file_path, "rb") as file_stream:
     magic = file_stream.read(8)
-    if magic != b"LITERTLM":
+    if magic != litertlm_core.HEADER_MAGIC_BYTES:
       raise ValueError(f"Invalid magic number: {magic}")
 
     major, minor, patch = struct.unpack("<III", file_stream.read(12))
