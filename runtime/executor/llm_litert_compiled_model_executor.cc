@@ -67,6 +67,7 @@
 #include "runtime/util/lora_util.h"
 #include "runtime/util/scoped_file.h"
 #include "runtime/util/status_macros.h"  // IWYU pragma: keep
+#include "runtime/util/tensor_buffer_util.h"
 #include "tflite/delegates/xnnpack/xnnpack_delegate.h"  // from @litert
 #include "tflite/types/half.h"  // from @litert
 
@@ -314,30 +315,6 @@ absl::StatusOr<RankedTensorType> GetEmbeddingLookupOutputTensorType(
   embedding_dims[1] = num_tokens;
   return RankedTensorType(output_element_type.ElementType(),
                           Layout(std::move(embedding_dims)));
-}
-
-struct MaybeWrappedTensorBuffer {
-  TensorBuffer buffer;
-  bool wrapped;
-};
-
-template <typename T>
-absl::StatusOr<MaybeWrappedTensorBuffer> WrapOrCreateTensorBufferFromHostMemory(
-    RankedTensorType tensor_type, absl::Span<T> data) {
-  size_t size = data.size() * sizeof(T);
-  // First try to wrap the memory with a TensorBuffer.
-  auto wrapped_buffer =
-      TensorBuffer::CreateFromHostMemory(tensor_type, data.data(), size);
-  if (wrapped_buffer.HasValue()) {
-    return MaybeWrappedTensorBuffer{.buffer = std::move(*wrapped_buffer),
-                                    .wrapped = true};
-  }
-
-  LITERT_ASSIGN_OR_RETURN(
-      auto new_buffer,
-      TensorBuffer::CreateManagedHostMemory(tensor_type, size));
-  return MaybeWrappedTensorBuffer{.buffer = std::move(new_buffer),
-                                  .wrapped = false};
 }
 
 // Returns a subspan of the given span for a chunk at the given index.
