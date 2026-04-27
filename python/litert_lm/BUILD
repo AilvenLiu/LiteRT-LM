@@ -29,8 +29,25 @@ cc_binary(
         "//c:engine.cc",
         "//c:engine.h",
     ],
+    copts = ["-fvisibility=hidden"],
+    features = ["-legacy_whole_archive"],
+    linkopts = select({
+        "@platforms//os:macos": [],
+        "@platforms//os:windows": [],
+        "//conditions:default": [
+            # Report unresolved symbol references as errors during linking.
+            "-Wl,--no-undefined",
+            # Strip all symbols to reduce library size (debug info is removed).
+            "-Wl,--strip-all",
+            # Remove unused sections/functions to further reduce library size.
+            "-Wl,--gc-sections",
+            # Ensure symbols are resolved internally first.
+            "-Wl,-Bsymbolic",
+            # Update the rpath
+            "-Wl,-rpath,$$ORIGIN",
+        ],
+    }),
     linkshared = 1,
-    visibility = ["//visibility:public"],
     deps = [
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/base:log_severity",
