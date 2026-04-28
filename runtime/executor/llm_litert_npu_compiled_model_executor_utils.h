@@ -39,13 +39,19 @@ int FindMaxIndexInt8Neon(const int8_t* data, int size);
 template <typename T>
 absl::StatusOr<int> FindMaxIndex(::litert::TensorBuffer& decoded_logits,
                                  bool use_neon_sampling) {
+  LITERT_ASSIGN_OR_RETURN(auto tensor_type, decoded_logits.TensorType());
+  LITERT_ASSIGN_OR_RETURN(size_t num_elements,
+                          tensor_type.Layout().NumElements());
+  if (num_elements == 0) {
+    return absl::InvalidArgumentError("Logits buffer is empty.");
+  }
   LITERT_ASSIGN_OR_RETURN(
       auto lock_and_addr,
       ::litert::TensorBufferScopedLock::Create(
-          decoded_logits, ::litert::TensorBuffer::LockMode::kRead));
+          const_cast<::litert::TensorBuffer&>(decoded_logits),
+          ::litert::TensorBuffer::LockMode::kRead));
   const T* data = static_cast<const T*>(lock_and_addr.second);
-  LITERT_ASSIGN_OR_RETURN(::litert::RankedTensorType tensor_type,
-                          decoded_logits.TensorType());
+
   LITERT_ASSIGN_OR_RETURN(size_t size, tensor_type.Layout().NumElements());
 
   if (size == 0) {
@@ -65,11 +71,11 @@ absl::StatusOr<int> FindMaxIndex(::litert::TensorBuffer& decoded_logits,
 #endif
 
   int max_index = 0;
-  T max_value = std::numeric_limits<T>::lowest();
-  for (int i = 0; i < size; ++i) {
+  T max_value = data[0];
+  for (size_t i = 1; i < num_elements; ++i) {
     if (data[i] > max_value) {
       max_value = data[i];
-      max_index = i;
+      max_index = static_cast<int>(i);
     }
   }
   return max_index;
