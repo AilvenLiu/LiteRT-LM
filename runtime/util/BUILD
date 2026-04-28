@@ -558,15 +558,14 @@ cc_test(
     srcs = ["litert_lm_streaming_loader_test.cc"],
     data = ["//runtime/testdata"],
     deps = [
+        ":data_stream",
         ":file_data_stream",
         ":litert_lm_streaming_loader",
         ":test_utils",
         "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:status_matchers",
-        "//runtime/util:data_stream",
         "//schema/core:litertlm_header_schema",
-        "//schema/core:litertlm_read",
     ],
 )
 
