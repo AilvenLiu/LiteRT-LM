@@ -24,16 +24,18 @@ the chosen framework, and then delegates execution to that framework's CLI.
 
 Usage example:
   bazel run //python/litert_lm_eval:litert_lm_eval \
-      --model_path /path/to/model.litertlm \
+      --model-path /path/to/model.litertlm \
       --tasks mmlu,gsm8k \
       --backend CPU \
-      --output_path /path/to/save/results.json
+      --output-path /path/to/save/results.json \
+      --apply-chat-template
 
   # Using the escape hatch for framework-specific arguments
   bazel run //python/litert_lm_eval:litert_lm_eval \
-      --model_path /path/to/model.litertlm \
+      --model-path /path/to/model.litertlm \
       --tasks mmlu \
-      --framework_args "limit=10"
+      --framework-args "limit=10" \
+      --apply-chat-template
 """
 
 import argparse
@@ -41,6 +43,7 @@ import json
 import sys
 
 import lm_eval
+import lm_eval.tasks
 
 from litert_lm_eval import utils
 from litert_lm_eval.runners.lm_eval_runner import litert_lm_model  # pylint: disable=unused-import
@@ -50,7 +53,7 @@ def main():
   parser = argparse.ArgumentParser(description="LiteRT LM Eval Runner")
 
   parser.add_argument(
-      "--model_path", type=str, required=True, help="Path to the model file."
+      "--model-path", type=str, required=True, help="Path to the model file."
   )
   parser.add_argument(
       "--tasks",
@@ -67,7 +70,7 @@ def main():
   )
 
   parser.add_argument(
-      "--num_fewshot",
+      "--num-fewshot",
       type=int,
       default=None,
       help="Number of examples in few-shot context.",
@@ -81,7 +84,7 @@ def main():
 
   # Escape hatch
   parser.add_argument(
-      "--framework_args",
+      "--framework-args",
       type=str,
       default="",
       help=(
@@ -91,13 +94,27 @@ def main():
   )
 
   parser.add_argument(
-      "--output_path",
+      "--output-path",
       type=str,
       default=None,
       help="Path to save the evaluation results as a JSON file.",
   )
+  parser.add_argument(
+      "--apply-chat-template",
+      action="store_true",
+      help=(
+          "Enables chat template application for evaluation requests. This flag"
+          " must always be set to True because the underlying LiteRT LM runner"
+          " intrinsically handles conversation formatting and applies the"
+          " model's chat template automatically to all internal context inputs."
+      ),
+  )
 
   args, unknown = parser.parse_known_args()
+
+  # Assert that the chat template is always applied. Though the actual
+  # application of the chat template is handled by the model runner.
+  assert args.apply_chat_template, "--apply-chat-template must be True"
 
   # Construct the model_args string required by lm_eval.
   model_args_str = f"model_path={args.model_path},backend={args.backend}"
@@ -111,13 +128,13 @@ def main():
   kwargs = utils.parse_unknown_args(unknown)
 
   print(f"Running evaluation with model 'litert_lm' on tasks: {tasks}")
-
   results = lm_eval.simple_evaluate(
       model="litert_lm",
       model_args=model_args_str,
       tasks=tasks,
       num_fewshot=args.num_fewshot,
       limit=args.limit,
+      apply_chat_template=args.apply_chat_template,
       **kwargs,  # Pass any remaining flags.
   )
 
