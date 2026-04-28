@@ -36,6 +36,7 @@ package_group(
         "//runtime/e2e_tests/...",
         "//c/...",
         "//python/...",
+        "//kotlin/...",
         # for SpeechProcessor
         # for AI Edge Hub
     ],
