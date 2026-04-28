@@ -309,14 +309,18 @@ class EngineTest(LiteRtLmTestBase):
           ["Hello"], store_token_lengths=True
       )
       self.assertIsInstance(scoring_responses, litert_lm.Responses)
-      if scoring_responses.texts:
-        self.assertEqual(scoring_responses.texts, ["Hello"])
+      self.assertEqual(scoring_responses.texts, ["Hello"])
       self.assertLen(scoring_responses.scores, 1)
       self.assertLen(scoring_responses.token_lengths, 1)
       self.assertIsInstance(scoring_responses.token_scores, list)
-      if scoring_responses.token_scores:
-        self.assertLen(scoring_responses.token_scores, 1)
-        self.assertIsInstance(scoring_responses.token_scores[0], list)
+      self.assertLen(scoring_responses.token_scores, 1)
+      self.assertIsInstance(scoring_responses.token_scores[0], list)
+      self.assertLen(
+          scoring_responses.token_scores[0],
+          scoring_responses.token_lengths[0],
+      )
+      for score in scoring_responses.token_scores[0]:
+        self.assertIsInstance(score, float)
 
   def test_session_api_run_text_scoring_no_token_lengths(self):
     with (
@@ -329,14 +333,14 @@ class EngineTest(LiteRtLmTestBase):
           ["Hello"], store_token_lengths=False
       )
       self.assertIsInstance(scoring_responses, litert_lm.Responses)
-      if scoring_responses.texts:
-        self.assertEqual(scoring_responses.texts, ["Hello"])
+      self.assertEqual(scoring_responses.texts, ["Hello"])
       self.assertLen(scoring_responses.scores, 1)
       self.assertEmpty(scoring_responses.token_lengths)
       self.assertIsInstance(scoring_responses.token_scores, list)
-      if scoring_responses.token_scores:
-        self.assertLen(scoring_responses.token_scores, 1)
-        self.assertIsInstance(scoring_responses.token_scores[0], list)
+      self.assertLen(scoring_responses.token_scores, 1)
+      self.assertIsInstance(scoring_responses.token_scores[0], list)
+      for score in scoring_responses.token_scores[0]:
+        self.assertIsInstance(score, float)
 
   def test_session_api_run_decode_async(self):
     with (
