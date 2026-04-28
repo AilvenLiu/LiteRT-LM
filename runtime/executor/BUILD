@@ -934,6 +934,7 @@ cc_library(
         "//runtime/util:file_util",
         "//runtime/util:litert_status_util",
         "//runtime/util:scoped_file",
+        "@litert//tflite/types:half",
     ] + select({
         "@litert//litert:litert_link_capi_so": [
             "@litert//litert/cc:litert_api_with_dynamic_runtime",
