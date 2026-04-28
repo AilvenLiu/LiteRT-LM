@@ -690,6 +690,31 @@ int litert_lm_responses_get_token_length_at(const LiteRtLmResponses* responses,
   return (*responses->responses.GetTokenLengths())[index];
 }
 
+bool litert_lm_responses_has_token_scores_at(const LiteRtLmResponses* responses,
+                                             int index) {
+  if (!responses || !responses->responses.GetTokenScores().has_value() ||
+      index < 0 || index >= responses->responses.GetTokenScores()->size()) {
+    return false;
+  }
+  return true;
+}
+
+int litert_lm_responses_get_num_token_scores_at(
+    const LiteRtLmResponses* responses, int index) {
+  if (!litert_lm_responses_has_token_scores_at(responses, index)) {
+    return 0;
+  }
+  return (*responses->responses.GetTokenScores())[index].size();
+}
+
+const float* litert_lm_responses_get_token_scores_at(
+    const LiteRtLmResponses* responses, int index) {
+  if (!litert_lm_responses_has_token_scores_at(responses, index)) {
+    return nullptr;
+  }
+  return (*responses->responses.GetTokenScores())[index].data();
+}
+
 LiteRtLmBenchmarkInfo* litert_lm_session_get_benchmark_info(
     LiteRtLmSession* session) {
   if (!session || !session->session) {

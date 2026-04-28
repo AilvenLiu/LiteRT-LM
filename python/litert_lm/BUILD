@@ -171,6 +171,7 @@ py_test(
         ":litert_lm",
         "@absl_py//absl/flags",
         "@absl_py//absl/testing:absltest",
+        "@absl_py//absl/testing:parameterized",
     ],
     imports = [".."],
 )

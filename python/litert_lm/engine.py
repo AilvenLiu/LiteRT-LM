@@ -204,10 +204,13 @@ class Engine(interfaces.AbstractEngine):
       sampler_config: interfaces.SamplerConfig | None = None,
       max_output_tokens: int | None = None,
   ) -> Session:
-    del apply_prompt_template  # Unused in this implementation
     session_config = self._lib.litert_lm_session_config_create()
     if not session_config:
       raise RuntimeError("Failed to create session config")
+
+    self._lib.litert_lm_session_config_set_apply_prompt_template(
+        session_config, apply_prompt_template
+    )
 
     if sampler_config:
       params = _sampler_config_to_params(sampler_config)

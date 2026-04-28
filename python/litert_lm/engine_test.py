@@ -16,13 +16,14 @@ import pathlib
 
 from absl import flags
 from absl.testing import absltest
+from absl.testing import parameterized
 
 import litert_lm
 
 FLAGS = flags.FLAGS
 
 
-class LiteRtLmTestBase(absltest.TestCase):
+class LiteRtLmTestBase(parameterized.TestCase):
 
   @classmethod
   def setUpClass(cls):
@@ -309,14 +310,18 @@ class EngineTest(LiteRtLmTestBase):
           ["Hello"], store_token_lengths=True
       )
       self.assertIsInstance(scoring_responses, litert_lm.Responses)
-      if scoring_responses.texts:
-        self.assertEqual(scoring_responses.texts, ["Hello"])
+      self.assertEqual(scoring_responses.texts, ["Hello"])
       self.assertLen(scoring_responses.scores, 1)
       self.assertLen(scoring_responses.token_lengths, 1)
       self.assertIsInstance(scoring_responses.token_scores, list)
-      if scoring_responses.token_scores:
-        self.assertLen(scoring_responses.token_scores, 1)
-        self.assertIsInstance(scoring_responses.token_scores[0], list)
+      self.assertLen(scoring_responses.token_scores, 1)
+      self.assertIsInstance(scoring_responses.token_scores[0], list)
+      self.assertLen(
+          scoring_responses.token_scores[0],
+          scoring_responses.token_lengths[0],
+      )
+      for score in scoring_responses.token_scores[0]:
+        self.assertIsInstance(score, float)
 
   def test_session_api_run_text_scoring_no_token_lengths(self):
     with (
@@ -329,14 +334,14 @@ class EngineTest(LiteRtLmTestBase):
           ["Hello"], store_token_lengths=False
       )
       self.assertIsInstance(scoring_responses, litert_lm.Responses)
-      if scoring_responses.texts:
-        self.assertEqual(scoring_responses.texts, ["Hello"])
+      self.assertEqual(scoring_responses.texts, ["Hello"])
       self.assertLen(scoring_responses.scores, 1)
       self.assertEmpty(scoring_responses.token_lengths)
       self.assertIsInstance(scoring_responses.token_scores, list)
-      if scoring_responses.token_scores:
-        self.assertLen(scoring_responses.token_scores, 1)
-        self.assertIsInstance(scoring_responses.token_scores[0], list)
+      self.assertLen(scoring_responses.token_scores, 1)
+      self.assertIsInstance(scoring_responses.token_scores[0], list)
+      for score in scoring_responses.token_scores[0]:
+        self.assertIsInstance(score, float)
 
   def test_session_api_run_decode_async(self):
     with (
@@ -369,6 +374,14 @@ class EngineTest(LiteRtLmTestBase):
       self.assertNotEmpty(responses)
       # We expect fewer responses than a full decode (which is 6 chunks).
       self.assertLess(len(responses), 6)
+
+  @parameterized.parameters(True, False)
+  def test_session_api_apply_prompt_template(self, apply_prompt_template):
+    with self._create_engine() as engine:
+      with engine.create_session(
+          apply_prompt_template=apply_prompt_template
+      ) as session:
+        self.assertIsNotNone(session)
 
 
 class FunctionCallingTest(LiteRtLmTestBase):
