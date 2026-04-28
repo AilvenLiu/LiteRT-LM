@@ -221,6 +221,14 @@ class ExecutorSettingsBase {
     activation_data_type_ = activation_data_type;
   }
 
+  // Mixed precision APIs.
+  bool IsMixedPrecisionEnabled() const {
+    return enable_mixed_precision_;
+  }
+  void SetEnableMixedPrecision(bool enable) {
+    enable_mixed_precision_ = enable;
+  }
+
   // Should be used by consumers who want to write to a single weight cache
   // file. Returns, in order of preference:
   //   1. an open file descriptor to the weight cache file,
@@ -301,6 +309,10 @@ class ExecutorSettingsBase {
   // this field will override the default activation data type, for example,
   // OpenCL backend only support fp32 on Linux.
   std::optional<ActivationDataType> activation_data_type_;
+
+  // Optional setting to enable mixed precision. If true, it will override
+  // activation data type to FP32 which underlying for mix precision.
+  bool enable_mixed_precision_ = false;
 
   // Optional LoRA model assets.
   std::optional<ModelAssets> lora_model_assets_;
