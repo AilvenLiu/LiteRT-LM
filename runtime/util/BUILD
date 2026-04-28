@@ -667,6 +667,8 @@ cc_library(
     srcs = ["model_type_utils.cc"],
     hdrs = ["model_type_utils.h"],
     deps = [
+        ":litert_status_util",
+        "@com_google_absl//absl/hash",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -674,7 +676,6 @@ cc_library(
         "//runtime/proto:llm_metadata_cc_proto",
         "//runtime/proto:llm_model_type_cc_proto",
         "//runtime/proto:token_cc_proto",
-        "//runtime/util:litert_status_util",
     ],
 )
 

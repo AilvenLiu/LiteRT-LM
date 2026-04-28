@@ -17,13 +17,11 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>  //NOLINT
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "absl/base/nullability.h"  // from @com_google_absl
@@ -44,7 +42,6 @@
 #include "litert/cc/litert_tensor_buffer_types.h"  // from @litert
 #include "runtime/engine/io_types.h"
 #include "runtime/executor/vision_executor_utils.h"
-#include "runtime/util/scoped_file.h"
 #if !defined(LITERT_DISABLE_NPU)
 #include "litert/cc/options/litert_google_tensor_options.h"  // from @litert
 #include "litert/cc/options/litert_qualcomm_options.h"  // from @litert
@@ -333,10 +330,15 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionAdapter::Initialize() {
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
                           CompiledModel::Create(env_, model_.Get(), options));
-  if (model_.GetNumSignatures() == 0) {
-    // Only create input buffers for single-signature models.
-    // If the model has multiple signatures, we will create input buffers for
-    // each signature in Encode() instead.
+  // This check verifies if signature 0 of the adapter model contains any
+  // inputs. This is used to infer whether input buffers should be created at
+  // initialization time (for single-signature models that use signature 0 by
+  // default) or skipped (for multi-signature models like ViT that create
+  // input buffers on-demand in `Encode` for a specific signature). This is a
+  // more direct check than relying on `patch_num_shrink_factor` which was
+  // previously used to detect multi-signature models.
+  auto signature_or = model_.GetSignature(0);
+  if (signature_or.HasValue() && !signature_or->InputNames().empty()) {
     LITERT_ASSIGN_OR_RETURN(input_buffers_,
                             compiled_model_.CreateInputBuffers(0));
     if (input_buffers_.size() != 1) {
@@ -346,6 +348,7 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionAdapter::Initialize() {
                        input_buffers_.size()));
     }
   }
+
   return absl::OkStatus();
 }
 
