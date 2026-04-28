@@ -257,31 +257,17 @@ py_package(
 )
 
 # To build normal wheel:
-# $ PYTHON_VERSION=3.10
-# $ bazel build \
-#     --repo_env=HERMETIC_PYTHON_VERSION=${PYTHON_VERSION} \
-#     --@rules_python//python/config_settings:python_version=${PYTHON_VERSION} \
-#     -c opt //python/litert_lm:wheel
+# $ bazel build -c opt //python/litert_lm:wheel
 #
 # To build nightly wheel:
-# $ PYTHON_VERSION=3.10
 # $ DATE=$(date +'%Y%m%d')
 # $ bazel build \
-#     --repo_env=HERMETIC_PYTHON_VERSION=${PYTHON_VERSION} \
-#     --@rules_python//python/config_settings:python_version=${PYTHON_VERSION} \
 #     --define=DEV_BUILD=1 \
 #     --define=DEV_VERSION=${DATE} \
 #     -c opt //python/litert_lm:wheel
 py_wheel(
     name = "wheel",
-    abi = select({
-        "@rules_python//python/config_settings:is_python_3.10": "cp310",
-        "@rules_python//python/config_settings:is_python_3.11": "cp311",
-        "@rules_python//python/config_settings:is_python_3.12": "cp312",
-        "@rules_python//python/config_settings:is_python_3.13": "cp313",
-        "@rules_python//python/config_settings:is_python_3.14": "cp314",
-        "//conditions:default": "none",
-    }),
+    abi = "none",
     distribution = select({
         "//python:dev_build": "litert-lm-api-nightly",
         "//conditions:default": "litert-lm-api",
@@ -293,25 +279,13 @@ py_wheel(
         "@platforms//os:windows": "win_amd64",
         "//conditions:default": "any",
     }),
-    python_tag = select({
-        "@rules_python//python/config_settings:is_python_3.10": "cp310",
-        "@rules_python//python/config_settings:is_python_3.11": "cp311",
-        "@rules_python//python/config_settings:is_python_3.12": "cp312",
-        "@rules_python//python/config_settings:is_python_3.13": "cp313",
-        "@rules_python//python/config_settings:is_python_3.14": "cp314",
-        "//conditions:default": "py3",
-    }),
+    python_tag = "py3",
     summary = "LiteRT-LM inference library",
     license = "Apache-2.0",
     description_file = "README.md",
     homepage = "https://github.com/google-ai-edge/LiteRT-LM",
     classifiers = [
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "Programming Language :: Python :: 3.14",
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: POSIX :: Linux",
         "Operating System :: Microsoft :: Windows",
