@@ -333,17 +333,19 @@ absl::Status VisionLiteRtCompiledModelExecutor::VisionAdapter::Initialize() {
 
   LITERT_ASSIGN_OR_RETURN(compiled_model_,
                           CompiledModel::Create(env_, model_.Get(), options));
-  if (vision_executor_properties_.patch_num_shrink_factor.has_value()) {
+  if (model_.GetNumSignatures() == 0) {
+    // Only create input buffers for single-signature models.
+    // If the model has multiple signatures, we will create input buffers for
+    // each signature in Encode() instead.
     LITERT_ASSIGN_OR_RETURN(input_buffers_,
                             compiled_model_.CreateInputBuffers(0));
+    if (input_buffers_.size() != 1) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("The Vision Adapter model must have exactly one input "
+                       "buffer but got ",
+                       input_buffers_.size()));
+    }
   }
-  if (input_buffers_.size() != 1) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("The Vision Adapter model must have exactly one input "
-                     "buffer but got ",
-                     input_buffers_.size()));
-  }
-
   return absl::OkStatus();
 }
 
