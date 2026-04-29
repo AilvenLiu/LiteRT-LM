@@ -16,12 +16,14 @@
 #define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_EXECUTOR_LLM_LITERT_NPU_COMPILED_MODEL_EXECUTOR_UTILS_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 
 #include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "litert/cc/litert_element_type.h"  // from @litert
 #include "litert/cc/litert_macros.h"  // from @litert
 #include "litert/cc/litert_ranked_tensor_type.h"  // from @litert
 #include "litert/cc/litert_tensor_buffer.h"  // from @litert
@@ -96,6 +98,18 @@ absl::Status HWMaskUpdate(
     absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>& in_buffers,
     absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer>&
         out_buffers);
+
+struct HWQuantizationParams {
+  const float* scales;
+  bool is_per_channel;
+};
+
+// Performs manual per-layer embedding lookup.
+absl::Status HWPerLayerEmbeddingLookup(
+    const int* token_ids, int num_tokens, const uint8_t* const* table_ptrs,
+    const HWQuantizationParams* quant_params, int num_tables, int col_size,
+    void* output_buffer, litert::ElementType output_type,
+    float final_scale = 1.0f, int32_t final_zero_point = 0);
 
 }  // namespace litert::lm
 

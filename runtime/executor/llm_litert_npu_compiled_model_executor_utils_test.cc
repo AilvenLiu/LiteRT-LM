@@ -57,6 +57,19 @@ int ReferenceFindMaxIndex(const std::vector<T>& data) {
   return max_idx;
 }
 
+std::vector<uint8_t> PackInt4(const std::vector<int8_t>& unpacked) {
+  std::vector<uint8_t> packed;
+  for (size_t i = 0; i < unpacked.size(); i += 2) {
+    int8_t low = unpacked[i] & 0xF;
+    int8_t high = 0;
+    if (i + 1 < unpacked.size()) {
+      high = unpacked[i + 1] & 0xF;
+    }
+    packed.push_back((high << 4) | low);
+  }
+  return packed;
+}
+
 class ExecutorUtilsTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -576,6 +589,122 @@ TEST_F(ExecutorUtilsTest, HWMaskUpdateGemma3Decode) {
 
   // Check new token part (at index 1280)
   EXPECT_EQ(global_lock.second[1280], valid_val);
+}
+
+TEST_F(ExecutorUtilsTest, HWPerLayerEmbeddingLookupFloat32) {
+  constexpr int kNumTables = 2;
+  constexpr int kColSize = 4;
+
+  std::vector<int8_t> table0_unpacked = {0, 1, 2, 3, -1, -2, -3, -4,
+                                         4, 5, 6, 7, -5, -6, -7, -8};
+  std::vector<int8_t> table1_unpacked = {0,  -1, -2, -3, 4, 5, 6, 7,
+                                         -4, -5, -6, -7, 1, 2, 3, -8};
+
+  std::vector<uint8_t> table0_packed = PackInt4(table0_unpacked);
+  std::vector<uint8_t> table1_packed = PackInt4(table1_unpacked);
+
+  std::vector<const uint8_t*> table_ptrs = {table0_packed.data(),
+                                            table1_packed.data()};
+
+  std::vector<float> scales0 = {1.0f, 2.0f, 0.5f, 1.0f};
+  std::vector<float> scales1 = {0.5f};
+
+  HWQuantizationParams qp[kNumTables];
+  qp[0].scales = scales0.data();
+  qp[0].is_per_channel = true;
+  qp[1].scales = scales1.data();
+  qp[1].is_per_channel = false;
+
+  std::vector<int32_t> token_ids = {1, 2};
+  int num_tokens = token_ids.size();
+
+  std::vector<float> output(num_tokens * kNumTables * kColSize, 0.0f);
+
+  auto status = HWPerLayerEmbeddingLookup(
+      token_ids.data(), num_tokens, table_ptrs.data(), qp, kNumTables, kColSize,
+      output.data(), litert::ElementType::Float32);
+
+  ASSERT_TRUE(status.ok());
+
+  std::vector<float> expected_output = {-2.0f, -4.0f, -6.0f, -8.0f, 2.0f, 2.5f,
+                                        3.0f,  3.5f,  2.0f,  2.5f,  3.0f, 3.5f,
+                                        -2.0f, -2.5f, -3.0f, -3.5f};
+
+  for (size_t i = 0; i < output.size(); ++i) {
+    EXPECT_NEAR(output[i], expected_output[i], 1e-5) << "Index " << i;
+  }
+}
+
+TEST_F(ExecutorUtilsTest, HWPerLayerEmbeddingLookupInt16) {
+  constexpr int kNumTables = 1;
+  constexpr int kColSize = 4;
+
+  std::vector<int8_t> table0_unpacked = {0, 1, 2, 3, -1, -2, -3, -4,
+                                         4, 5, 6, 7, -5, -6, -7, -8};
+
+  std::vector<uint8_t> table0_packed = PackInt4(table0_unpacked);
+  std::vector<const uint8_t*> table_ptrs = {table0_packed.data()};
+
+  std::vector<float> scales0 = {1.0f};
+
+  HWQuantizationParams qp[kNumTables];
+  qp[0].scales = scales0.data();
+  qp[0].is_per_channel = false;
+
+  std::vector<int32_t> token_ids = {1};
+  int num_tokens = token_ids.size();
+
+  std::vector<int16_t> output(num_tokens * kNumTables * kColSize, 0);
+
+  float final_scale = 0.5f;
+  int32_t final_zero_point = 10;
+
+  auto status = HWPerLayerEmbeddingLookup(
+      token_ids.data(), num_tokens, table_ptrs.data(), qp, kNumTables, kColSize,
+      output.data(), litert::ElementType::Int16, final_scale, final_zero_point);
+
+  ASSERT_TRUE(status.ok());
+
+  std::vector<int16_t> expected_output = {8, 6, 4, 2};
+
+  for (size_t i = 0; i < output.size(); ++i) {
+    EXPECT_EQ(output[i], expected_output[i]) << "Index " << i;
+  }
+}
+
+TEST_F(ExecutorUtilsTest, HWPerLayerEmbeddingLookupNeon) {
+  constexpr int kNumTables = 1;
+  constexpr int kColSize = 32;
+
+  std::vector<int8_t> table0_unpacked(kColSize);
+  for (int i = 0; i < kColSize; ++i) {
+    table0_unpacked[i] = (i % 16) - 8;
+  }
+
+  std::vector<uint8_t> table0_packed = PackInt4(table0_unpacked);
+  std::vector<const uint8_t*> table_ptrs = {table0_packed.data()};
+
+  std::vector<float> scales0 = {1.0f};
+
+  HWQuantizationParams qp[kNumTables];
+  qp[0].scales = scales0.data();
+  qp[0].is_per_channel = false;
+
+  std::vector<int32_t> token_ids = {0};
+  int num_tokens = token_ids.size();
+
+  std::vector<float> output(num_tokens * kNumTables * kColSize, 0.0f);
+
+  auto status = HWPerLayerEmbeddingLookup(
+      token_ids.data(), num_tokens, table_ptrs.data(), qp, kNumTables, kColSize,
+      output.data(), litert::ElementType::Float32);
+
+  ASSERT_TRUE(status.ok());
+
+  for (size_t i = 0; i < output.size(); ++i) {
+    EXPECT_NEAR(output[i], static_cast<float>(table0_unpacked[i]), 1e-5)
+        << "Index " << i;
+  }
 }
 
 }  // namespace
