@@ -199,8 +199,6 @@ cc_library(
     deps = select({
         # If CAPI is linked dynamically, need to link the accelerator dynamically as well.
         "@litert//litert:litert_link_capi_so": [],
-        # TODO(b/441627719) The backends should be configurable, hardcoding to WebGPU for now
-        # as that's the most stable backend across platforms.
         "//conditions:default": [
         ],
     }) + select({
