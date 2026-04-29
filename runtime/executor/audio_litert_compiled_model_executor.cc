@@ -90,6 +90,8 @@ absl::Status SetGpuOptions(const AudioExecutorSettings& executor_settings,
 #endif  // !__APPLE__
   gpu_options.SetMadviseOriginalSharedTensors(true);
   gpu_options.SetConvertWeightsOnGpu(true);
+  gpu_options.SetHintFullyDelegatedToSingleDelegate(true);
+  gpu_options.EnableInfiniteFloatCapping(true);
   return absl::OkStatus();
 }
 
