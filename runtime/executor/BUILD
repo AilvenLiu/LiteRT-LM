@@ -201,6 +201,10 @@ cc_library(
         "@litert//litert:litert_link_capi_so": [],
         # TODO(b/441627719) The backends should be configurable, hardcoding to WebGPU for now
         # as that's the most stable backend across platforms.
+        # ..except on iOS which uses Metal since existing customers already use it.
+        "@platforms//os:ios": [
+            "@litert//litert/runtime/accelerators/gpu:ml_drift_metal_accelerator",
+        ],
         "//conditions:default": [
         ],
     }) + select({
