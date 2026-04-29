@@ -71,7 +71,12 @@ absl::Status SetGpuOptions(const AudioExecutorSettings& executor_settings,
   gpu_options.SetBackend(GpuOptions::Backend::kWebGpu);
 #endif  // defined(LITERT_USE_WEBGPU_ACCELERATOR)
   gpu_options.EnableConstantTensorSharing(true);
-  if (executor_settings.GetActivationDataType().has_value()) {
+  // Mixed precision setting overrides the activation data type setting. The
+  // underlying delegate uses fp32 precision to represent mixed precision, so we
+  // set it to fp32 here.
+  if (executor_settings.IsMixedPrecisionEnabled()) {
+    gpu_options.SetPrecision(GpuOptions::Precision::kFp32);
+  } else if (executor_settings.GetActivationDataType().has_value()) {
     if (executor_settings.GetActivationDataType().value() ==
         ActivationDataType::FLOAT32) {
       gpu_options.SetPrecision(GpuOptions::Precision::kFp32);
