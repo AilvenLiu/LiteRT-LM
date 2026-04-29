@@ -97,8 +97,11 @@ def _get_lib() -> ctypes.CDLL:
     return _LIB
 
   import sys
-  extension = "dylib" if sys.platform == "darwin" else "so"
-  lib_name = f"liblitert-lm.{extension}"
+  if sys.platform == "win32":
+    lib_name = "litert-lm.dll"
+  else:
+    extension = "dylib" if sys.platform == "darwin" else "so"
+    lib_name = f"liblitert-lm.{extension}"
 
   # 1. Try loading using importlib.resources (handles .par and package files)
   try:
