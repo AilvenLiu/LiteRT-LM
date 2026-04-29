@@ -97,6 +97,9 @@ ABSL_FLAG(bool, gpu_madvise_original_shared_tensors, true,
           "If true, the GPU backend will madvise the original shared tensors "
           "after use.");
 ABSL_FLAG(bool, disable_cache, false, "Disable weight cache.");
+ABSL_FLAG(
+    std::string, cache_dir, "",
+    "Directory for cache. Use ':memory' for in-memory cache. CPU path only");
 ABSL_FLAG(std::string, preferred_device_substr, "",
           "Preferred WebGPU device name substring, case-insensitive. "
           "If not empty, the adapter which the device name contains the "
