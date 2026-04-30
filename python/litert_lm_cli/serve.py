@@ -328,9 +328,6 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
       self.send_error(400, "Invalid JSON")
       return
 
-    click.echo(click.style("Request Body (OpenAI):", fg="magenta"))
-    click.echo(json.dumps(body, indent=2, ensure_ascii=False))
-
     model_id = body.get("model")
     prompt = body.get("input")
 
@@ -347,48 +344,104 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
       self.send_error(500, f"Failed to load engine: {e!r}")
       return
 
+    stream = body.get("stream", False)
+
     try:
       with engine.create_conversation(
           messages=[],
           automatic_tool_calling=False,
       ) as conv:
-        response = conv.send_message(prompt)
-        click.echo(click.style("Raw Engine Response:", fg="magenta"))
-        click.echo(json.dumps(response, ensure_ascii=False))
+        if not stream:
+          response = conv.send_message(prompt)
 
-        text_output = "".join(
-            item.get("text", "")
-            for item in response.get("content", [])
-            if item.get("type") == "text"
-        )
+          text_output = "".join(
+              item.get("text", "")
+              for item in response.get("content", [])
+              if item.get("type") == "text"
+          )
 
-        now_str = datetime.datetime.now(datetime.timezone.utc).strftime(
-            "%Y%m%d%H%M%S%f"
-        )
-        resp_body = {
-            "id": f"resp_{now_str}",
-            "output": [{
-                "id": f"msg_{now_str}",
-                "type": "message",
-                "role": "assistant",
-                "status": "completed",
-                "content": [{
-                    "type": "output_text",
-                    "text": text_output,
-                    "annotations": [],
-                }],
-            }],
-        }
+          now_str = datetime.datetime.now(datetime.timezone.utc).strftime(
+              "%Y%m%d%H%M%S%f"
+          )
+          resp_body = {
+              "id": f"resp_{now_str}",
+              "output": [{
+                  "id": f"msg_{now_str}",
+                  "type": "message",
+                  "role": "assistant",
+                  "status": "completed",
+                  "content": [{
+                      "type": "output_text",
+                      "text": text_output,
+                      "annotations": [],
+                  }],
+              }],
+          }
 
-        click.echo(click.style("OpenAI Response Body:", fg="magenta"))
-        click.echo(json.dumps(resp_body, indent=2, ensure_ascii=False))
+          self.send_response(200)
+          self.send_header("Content-Type", "application/json")
+          self.end_headers()
+          self.wfile.write(
+              json.dumps(resp_body, ensure_ascii=False).encode("utf-8")
+          )
+          return
 
+        # TODO: b/507147993 - Handle client early disconnects robustly.
+        # Handle streaming response using Server-Sent Events (SSE).
+        # We send response.created, response.output_text.delta, and
+        # response.completed events.
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
-        self.wfile.write(
-            json.dumps(resp_body, ensure_ascii=False).encode("utf-8")
-        )
+
+        try:
+          now_str = datetime.datetime.now(datetime.timezone.utc).strftime(
+              "%Y%m%d%H%M%S%f"
+          )
+          resp_id = f"resp_{now_str}"
+
+          self.wfile.write(
+              "event: response.created\ndata:"
+              f" {json.dumps({'id': resp_id, 'status': 'in_progress'})}\n\n"
+              .encode("utf-8")
+          )
+          self.wfile.flush()
+
+          for chunk in conv.send_message_async(prompt):
+            text_output = "".join(
+                item.get("text", "")
+                for item in chunk.get("content", [])
+                if item.get("type") == "text"
+            )
+            if text_output:
+              self.wfile.write(
+                  "event: response.output_text.delta\ndata:"
+                  f" {json.dumps({'delta': {'text': text_output}})}\n\n".encode(
+                      "utf-8"
+                  )
+              )
+              self.wfile.flush()
+
+          self.wfile.write(
+              "event: response.completed\ndata:"
+              f" {json.dumps({'id': resp_id, 'status': 'completed'})}\n\n"
+              .encode("utf-8")
+          )
+          self.wfile.flush()
+          self.wfile.write(b"data: [DONE]\n\n")
+          self.wfile.flush()
+        except Exception as e:
+          click.echo(click.style(f"Error during streaming: {e!r}", fg="red"))
+          try:
+            self.wfile.write(
+                "event: response.error\ndata:"
+                f" {json.dumps({'error': repr(e)})}\n\n".encode("utf-8")
+            )
+            self.wfile.flush()
+          except Exception:  # pylint: disable=broad-exception-caught
+            pass
+          return
 
     except Exception as e:  # pylint: disable=broad-exception-caught
       click.echo(click.style(f"Error during inference: {e!r}", fg="red"))
