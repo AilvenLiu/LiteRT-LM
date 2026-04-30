@@ -103,6 +103,39 @@ absl::Status ValidateBackendConstraint(
   return absl::OkStatus();
 }
 
+// Maybe override the activation data type for the executor settings.
+// If the activation data type is set or the prefer_activation_type is not
+// set, we use the system default activation data type:
+// - Text executor defaults to F16.
+// - Vision executor defaults to F32.
+// - Audio executor defaults to F32.
+//
+// If the prefer_activation_type is set, we override the activation data type
+// to the prefer_activation_type.
+//
+// If the prefer_activation_type is "fp32_fp16", we set the activation data
+// type to F32 and set the enable_mixed_precision to true.
+absl::Status MaybeOverrideActivationType(
+    ExecutorSettingsBase& executor_settings,
+    const std::optional<std::string>& prefer_activation_type) {
+  if (executor_settings.GetActivationDataType().has_value() ||
+      !prefer_activation_type.has_value()) {
+    return absl::OkStatus();
+  }
+  if (prefer_activation_type.has_value()) {
+    ASSIGN_OR_RETURN(
+        ActivationDataType activation_data_type,
+        GetActivationDataTypeFromString(prefer_activation_type.value()));
+    executor_settings.SetActivationDataType(activation_data_type);
+    if (prefer_activation_type.value() == "fp32_fp16") {
+      // For mixed precision, we need to set the activation data type to F32
+      // and set the enable_mixed_precision to true.
+      executor_settings.SetEnableMixedPrecision(true);
+    }
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 // static
@@ -192,7 +225,10 @@ absl::Status EngineSettings::MaybeUpdateAndValidate(
     absl::string_view input_prompt_as_hint,
     const std::optional<std::string>& text_backend_constraint,
     const std::optional<std::string>& vision_backend_constraint,
-    const std::optional<std::string>& audio_backend_constraint) {
+    const std::optional<std::string>& audio_backend_constraint,
+    const std::optional<std::string>& text_prefer_activation_type,
+    const std::optional<std::string>& vision_prefer_activation_type,
+    const std::optional<std::string>& audio_prefer_activation_type) {
   proto::LlmMetadata& metadata = GetMutableLlmMetadata();
   // Copy the metadata from the file if it is provided.
   if (metadata_from_file != nullptr) {
@@ -370,15 +406,21 @@ absl::Status EngineSettings::MaybeUpdateAndValidate(
   // constraint is compatible with the executor settings.
   RETURN_IF_ERROR(ValidateBackendConstraint(main_executor_settings_,
                                             text_backend_constraint, "Main"));
+  RETURN_IF_ERROR(MaybeOverrideActivationType(main_executor_settings_,
+                                              text_prefer_activation_type));
 
   if (vision_executor_settings_.has_value()) {
     RETURN_IF_ERROR(ValidateBackendConstraint(vision_executor_settings_.value(),
                                               vision_backend_constraint,
                                               "Vision"));
+    RETURN_IF_ERROR(MaybeOverrideActivationType(
+        vision_executor_settings_.value(), vision_prefer_activation_type));
   }
   if (audio_executor_settings_.has_value()) {
     RETURN_IF_ERROR(ValidateBackendConstraint(
         audio_executor_settings_.value(), audio_backend_constraint, "Audio"));
+    RETURN_IF_ERROR(MaybeOverrideActivationType(
+        audio_executor_settings_.value(), audio_prefer_activation_type));
   }
 
   ABSL_VLOG(5) << "The llm metadata: " << metadata.DebugString();

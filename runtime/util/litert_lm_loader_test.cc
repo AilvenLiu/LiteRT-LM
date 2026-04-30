@@ -249,10 +249,28 @@ TEST(LitertLmLoaderTest, GetHuggingFaceTokenizerLargeDecompressionSize) {
   auto model_file = ScopedFile::Open(header_path.string());
   ASSERT_TRUE(model_file.ok());
 
-  ASSERT_OK_AND_ASSIGN(auto loader, LitertLmLoader::Create(std::move(model_file.value())));
+  ASSERT_OK_AND_ASSIGN(auto loader,
+                       LitertLmLoader::Create(std::move(model_file.value())));
 
   auto tokenizer = loader->GetHuggingFaceTokenizer();
   EXPECT_FALSE(tokenizer.has_value());
+}
+
+TEST(LitertLmLoaderTest, GetTFLiteModelExtraMetadata) {
+  const auto model_path =
+      std::filesystem::path(::testing::SrcDir()) /
+      "litert_lm/runtime/testdata/test_lm_with_metadata.litertlm";
+  ASSERT_OK_AND_ASSIGN(auto model_file, ScopedFile::Open(model_path.string()));
+  ASSERT_OK_AND_ASSIGN(auto loader_ptr,
+                       LitertLmLoader::Create(std::move(model_file)));
+  auto& loader = *loader_ptr;
+
+  EXPECT_EQ(loader.GetTFLiteModelPreferActivationType(
+                ModelType::kTfLitePrefillDecode),
+            "fp16");
+  EXPECT_EQ(
+      loader.GetTFLiteModelBackendConstraint(ModelType::kTfLitePrefillDecode),
+      "cpu");
 }
 
 }  // namespace
