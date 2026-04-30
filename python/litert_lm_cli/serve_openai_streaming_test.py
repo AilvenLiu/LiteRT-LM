@@ -1,4 +1,5 @@
 import collections.abc
+import http.client
 import http.server
 import json
 import pathlib
@@ -55,9 +56,6 @@ class ServeOpenAIStreamingTest(absltest.TestCase):
     super().tearDown()
 
   def test_openai_responses_streaming(self):
-    self.assertTrue(
-        self.model_path.exists(), f"Model not found at {self.model_path}"
-    )
 
     mock_from_id = self.enter_context(
         mock.patch.object(model.Model, "from_model_id", autospec=True)
@@ -113,6 +111,62 @@ class ServeOpenAIStreamingTest(absltest.TestCase):
 
       with self.subTest(name="Verify DONE message"):
         self.assertIn("data: [DONE]", lines)
+
+  def test_openai_responses_streaming_client_disconnect(self):
+
+    mock_from_id = self.enter_context(
+        mock.patch.object(model.Model, "from_model_id", autospec=True)
+    )
+    mock_from_id.return_value = model.Model(
+        model_id="gemma3", model_path=str(self.model_path)
+    )
+
+    data = json.dumps(
+        {"model": "gemma3", "input": "Count to 50", "stream": True}
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        f"http://localhost:{self.port}/v1/responses",
+        data=data,
+        headers={"Content-Type": "application/json"},
+    )
+
+    response = urllib.request.urlopen(req, timeout=60)
+    self.assertEqual(response.getcode(), 200)
+
+    for line in response:
+      line_str = line.decode("utf-8")
+      if line_str.startswith("event: response.output_text.delta"):
+        data_line = next(response).decode("utf-8")
+        self.assertStartsWith(data_line, "data: ")
+        break
+    else:
+      self.fail("Stream ended early without delta event")
+
+    # This tests a scenario where a client makes a request and exits before the
+    # response is completed. Note: this assumes prefill is already complete.
+    # TODO: b/508348544 - There are other scenarios where a client can cause the
+    # server to hang.
+    response.close()
+
+    conn = http.client.HTTPConnection("localhost", self.port, timeout=15)
+    try:
+      conn.request(
+          "POST",
+          "/v1/responses",
+          body=json.dumps({"model": "gemma3", "input": "Hi"}).encode("utf-8"),
+          headers={"Content-Type": "application/json"},
+      )
+      try:
+        response2 = conn.getresponse()
+      except Exception as e:
+        self.fail(f"Second request failed (timed out as expected?): {e!r}")
+
+      self.assertEqual(response2.status, 200)
+      res_body2 = json.loads(response2.read().decode("utf-8"))
+      self.assertIn("id", res_body2)
+    finally:
+      conn.close()
 
 
 if __name__ == "__main__":
