@@ -73,37 +73,16 @@ class Conversation(interfaces.AbstractConversation):
   def _handle_tool_calls(
       self, response_dict: collections.abc.Mapping[str, Any]
   ) -> list[collections.abc.Mapping[str, Any]] | None:
-    extracted_tool_calls = []
-
-    # Support top-level tool_calls field
-    if "tool_calls" in response_dict:
-      tc_list = response_dict["tool_calls"]
-      if isinstance(tc_list, list):
-        for tc in tc_list:
-          if isinstance(tc, dict):
-            # If it's a direct tool call object (OpenAI-like)
-            if tc.get("type") == "function" and "function" in tc:
-              extracted_tool_calls.append(tc["function"])
-            else:
-              extracted_tool_calls.append(tc)
-
-    # Support tool calls inside content list (multimodal format)
-    contents = response_dict.get("content", [])
-    if not isinstance(contents, list):
-      contents = [contents]
-
-    for content in contents:
-      if isinstance(content, dict) and content.get("type") == "tool_call":
-        extracted_tool_calls.append(content["tool_call"])
-
-    if not extracted_tool_calls:
+    if "tool_calls" not in response_dict:
       return None
 
     tool_responses = []
-    for tool_call in extracted_tool_calls:
-      name = tool_call.get("name")
-      args = tool_call.get("arguments", {})
-      call_id = tool_call.get("id")
+    for tool_call in response_dict.get("tool_calls"):
+      if "function" not in tool_call:
+        raise ValueError("Missing 'function' in tool_call")
+      function = tool_call.get("function")
+      name = function.get("name", "")
+      args = function.get("arguments", {})
 
       if self.tool_event_handler:
         if not self.tool_event_handler.approve_tool_call(tool_call):
@@ -119,20 +98,17 @@ class Conversation(interfaces.AbstractConversation):
           logging.exception("interfaces.Tool execution failed: %s", name)
           result = f"Error: {str(e)}"
 
-      tool_response = {
-          "role": "tool",
-          "content": [{"name": name, "response": result}],
-      }
-      if call_id:
-        tool_response["tool_call_id"] = call_id
-      if name:
-        tool_response["name"] = name
-
       if self.tool_event_handler:
-        tool_response = self.tool_event_handler.process_tool_response(
-            tool_response
-        )
-      tool_responses.append(tool_response)
+        result = self.tool_event_handler.process_tool_response(result)
+
+      tool_responses.append({
+          "role": "tool",
+          "content": [{
+              "type": "tool_response",
+              "name": name,
+              "response": result,
+          }],
+      })
 
     return tool_responses
 
