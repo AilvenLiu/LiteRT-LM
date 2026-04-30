@@ -554,9 +554,7 @@ class Model:
     )
 
     return [
-        Model.from_model_id(
-            path.removesuffix("/model.litertlm").replace("--", "/")
-        )
+        Model.from_model_id(pathlib.Path(path).parent.name.replace("--", "/"))
         for path in model_paths
     ]
 

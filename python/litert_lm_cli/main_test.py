@@ -404,6 +404,37 @@ class MainTest(absltest.TestCase):
     )
     mock_model.run_interactive.assert_not_called()
 
+  @unittest.mock.patch(
+      "litert_lm_cli.main.os.stat"
+  )
+  @unittest.mock.patch(
+      "litert_lm_cli.model.Model.get_all_models"
+  )
+  def test_list_models(self, mock_get_all_models, mock_stat):
+    mock_model1 = unittest.mock.MagicMock()
+    mock_model1.model_id = "gemma3-1b"
+    mock_model1.model_path = "/path/to/gemma3-1b/model.litertlm"
+
+    mock_model2 = unittest.mock.MagicMock()
+    mock_model2.model_id = "custom-model"
+    mock_model2.model_path = "/path/to/custom-model/model.litertlm"
+
+    mock_get_all_models.return_value = [mock_model1, mock_model2]
+
+    mock_stat_result = unittest.mock.MagicMock()
+    mock_stat_result.st_size = 1024 * 1024 * 500  # 500 MB
+    mock_stat_result.st_mtime = 1741212053  # 2026-03-05 17:00:53
+    mock_stat.return_value = mock_stat_result
+
+    runner = CliRunner()
+    result = runner.invoke(main.cli, ["list"])
+
+    self.assertEqual(result.exit_code, 0)
+    self.assertIn("gemma3-1b", result.output)
+    self.assertIn("500.0 MB", result.output)
+    self.assertIn("custom-model", result.output)
+    self.assertNotIn("Unknown", result.output)
+
 
 if __name__ == "__main__":
   absltest.main()
