@@ -496,3 +496,11 @@ pip_parse(
 load("@custom_pip_deps//:requirements.bzl", install_custom_deps = "install_deps")
 
 install_custom_deps()
+
+# DirectX Shader Compiler DLLs for Windows
+http_archive(
+    name = "directx_shader_compiler",
+    build_file = "@//:BUILD.directx_shader_compiler",
+    sha256 = "a1e89031421cf3c1fca6627766ab3020ca4f962ac7e2caa7fab2b33a8436151e",
+    url = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2602/dxc_2026_02_20.zip",
+)
