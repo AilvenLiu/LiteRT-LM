@@ -30,6 +30,7 @@
 #include "absl/strings/str_cat.h"  // from @com_google_absl
 #include "absl/strings/str_split.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "runtime/components/model_resources.h"
 #include "runtime/components/tokenizer.h"
 #include "runtime/executor/audio_executor_settings.h"
 #include "runtime/executor/executor_settings_base.h"
@@ -40,9 +41,11 @@
 #include "runtime/proto/llm_model_type.pb.h"
 #include "runtime/proto/sampler_params.pb.h"
 #include "runtime/proto/token.pb.h"
+#include "runtime/util/litert_lm_loader.h"
 #include "runtime/util/model_type_utils.h"
 #include "runtime/util/scoped_file.h"
 #include "runtime/util/status_macros.h"  // IWYU pragma: keep
+#include "schema/core/litertlm_header_schema_generated.h"
 
 namespace litert::lm {
 namespace {
@@ -107,6 +110,54 @@ absl::StatusOr<EngineSettings> EngineSettings::CreateDefault(
     ModelAssets model_assets, Backend backend,
     std::optional<Backend> vision_backend, std::optional<Backend> audio_backend,
     std::optional<Backend> sampler_backend) {
+  if (backend == Backend::GPU) {
+    bool is_text_artisan = false;
+
+    std::optional<absl::StatusOr<std::unique_ptr<LitertLmLoader>>>
+        loader_status;
+    // Optimize peak memory usage by reusing the existing memory mapping if
+    // available, avoiding duplicating file descriptors and creating new
+    // mappings.
+    if (model_assets.HasMemoryMappedFile()) {
+      auto mapped_file_status = model_assets.GetMemoryMappedFile();
+      if (mapped_file_status.ok()) {
+        loader_status = LitertLmLoader::Create(*mapped_file_status);
+      }
+    } else {
+      auto scoped_file_status = model_assets.GetOrCreateScopedFile();
+      if (scoped_file_status.ok()) {
+        auto duplicated_file_status = (*scoped_file_status)->Duplicate();
+        if (duplicated_file_status.ok()) {
+          loader_status =
+              LitertLmLoader::Create(std::move(*duplicated_file_status));
+        }
+      }
+    }
+
+    if (loader_status.has_value() && (*loader_status).ok()) {
+      // loader_status is
+      // std::optional<absl::StatusOr<std::unique_ptr<LitertLmLoader>>>. We need
+      // to dereference 3 times to get to the LitertLmLoader object:
+      // 1. *loader_status gets the StatusOr.
+      // 2. **loader_status gets the unique_ptr.
+      // 3. ***loader_status gets the LitertLmLoader.
+      const auto& loader = ***loader_status;
+      if (loader
+              .GetSectionLocation(
+                  BufferKey(schema::AnySectionDataType_TFLiteModel,
+                            ModelType::kArtisanTextDecoder))
+              .ok()) {
+        is_text_artisan = true;
+      }
+    }
+
+    if (is_text_artisan) {
+      ABSL_LOG(INFO) << "Artisan model detected. Switching backend from GPU to "
+                        "GPU_ARTISAN.";
+      backend = Backend::GPU_ARTISAN;
+    }
+  }
+
   ASSIGN_OR_RETURN(  // NOLINT
       auto executor_settings, LlmExecutorSettings::CreateDefault(
                                   model_assets, backend, sampler_backend));

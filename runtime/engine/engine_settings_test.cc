@@ -26,15 +26,16 @@
 #include <gtest/gtest.h>
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
+#include "absl/strings/str_cat.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "absl/types/optional.h"  // from @com_google_absl
+#include "litert/cc/internal/scoped_file.h"  // from @litert  // IWYU pragma: keep
 #include "runtime/components/tokenizer.h"
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/proto/engine.pb.h"
 #include "runtime/proto/llm_metadata.pb.h"
 #include "runtime/proto/llm_model_type.pb.h"
 #include "runtime/proto/token.pb.h"
-#include "litert/cc/internal/scoped_file.h"  // from @litert  // IWYU pragma: keep
 #include "runtime/util/test_utils.h"  // IWYU pragma: keep
 
 namespace litert::lm {

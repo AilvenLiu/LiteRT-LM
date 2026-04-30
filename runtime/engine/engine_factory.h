@@ -15,6 +15,7 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LM_RUNTIME_ENGINE_ENGINE_FACTORY_H_
 #define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_ENGINE_ENGINE_FACTORY_H_
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -29,6 +30,7 @@
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "runtime/engine/engine.h"
 #include "runtime/engine/engine_settings.h"
+#include "runtime/executor/executor_settings_base.h"
 
 namespace litert::lm {
 
@@ -59,6 +61,8 @@ class EngineFactory {
   enum class EngineType {
     kAdvancedLiteRTCompiledModel,
     kLiteRTCompiledModel,
+    kLegacyTfLite,
+    kAdvancedLegacyTfLite,
   };
 
   // Returns the string representation of the engine type.
@@ -66,33 +70,69 @@ class EngineFactory {
     switch (engine_type) {
       case EngineType::kLiteRTCompiledModel:
         return "kLiteRTCompiledModel";
+      case EngineType::kLegacyTfLite:
+        return "kLegacyTfLite";
+      case EngineType::kAdvancedLegacyTfLite:
+        return "kAdvancedLegacyTfLite";
+      case EngineType::kAdvancedLiteRTCompiledModel:
+        return "kAdvancedLiteRTCompiledModel";
       default:
         return "Unknown";
     }
   }
 
-  // Creates a default Engine instance of type kLiteRTCompiledModel.
+  // Creates a default Engine based on the given EngineSetting and the preferred
+  // engines map. It picks the first available (registered) engine type mapped
+  // to the backend specified in settings.
   static absl::StatusOr<std::unique_ptr<Engine>> CreateDefault(
       EngineSettings settings, absl::string_view input_prompt_as_hint = "") {
-    return Create(EngineType::kLiteRTCompiledModel, std::move(settings),
-                  input_prompt_as_hint);
-  }
-
-  // Creates an Engine instance of any registered type.
-  // If multiple engine types are registered, the first one is used.
-  // The ordering of the engine can be observed using ListEngineTypes().
-  static absl::StatusOr<std::unique_ptr<Engine>> CreateAny(
-      EngineSettings settings, absl::string_view input_prompt_as_hint = "") {
     auto& instance = Instance();
-    if (instance.registry_.size() != 1) {
-      ABSL_LOG(WARNING) << "Multiple engine types are registered. "
-                        << "Using the first one with type: "
-                        << EngineTypeToString(
-                               instance.registry_.begin()->first);
+    Backend backend = settings.GetMutableMainExecutorSettings().GetBackend();
+
+    auto it = instance.preferred_engines_.find(backend);
+    if (it != instance.preferred_engines_.end()) {
+      for (auto engine_type : it->second) {
+        if (instance.registry_.contains(engine_type)) {
+          return Create(engine_type, std::move(settings), input_prompt_as_hint);
+        }
+      }
     }
 
-    return Create(instance.registry_.begin()->first, std::move(settings),
-                  input_prompt_as_hint);
+    std::string error_msg = absl::StrCat("No available engine for backend: ",
+                                         GetBackendString(backend));
+
+    if (it != instance.preferred_engines_.end()) {
+      absl::StrAppend(&error_msg, ". Preferred engine types: [");
+      for (size_t i = 0; i < it->second.size(); ++i) {
+        absl::StrAppend(&error_msg, EngineTypeToString(it->second[i]));
+        if (i < it->second.size() - 1) absl::StrAppend(&error_msg, ", ");
+      }
+      absl::StrAppend(&error_msg, "]");
+    } else {
+      absl::StrAppend(&error_msg,
+                      ". No preferred engine types defined for this backend");
+    }
+
+    absl::StrAppend(&error_msg, ". Available (registered) engine types: [");
+    auto available_types_or = instance.ListEngineTypes();
+    if (available_types_or.ok()) {
+      for (size_t i = 0; i < available_types_or->size(); ++i) {
+        absl::StrAppend(&error_msg,
+                        EngineTypeToString((*available_types_or)[i]));
+        if (i < available_types_or->size() - 1)
+          absl::StrAppend(&error_msg, ", ");
+      }
+    }
+    absl::StrAppend(&error_msg, "]");
+
+    return absl::NotFoundError(error_msg);
+  }
+
+  // Same as CreateDefault.
+  // TODO - b/503516226: Clean up this "CreateAny". Use "CreateDefault".
+  static absl::StatusOr<std::unique_ptr<Engine>> CreateAny(
+      EngineSettings settings, absl::string_view input_prompt_as_hint = "") {
+    return CreateDefault(std::move(settings), input_prompt_as_hint);
   }
 
   // Creates an Engine instance of the given type.
@@ -102,8 +142,8 @@ class EngineFactory {
     auto& instance = Instance();
     auto it = instance.registry_.find(engine_type);
     if (it == instance.registry_.end()) {
-      return absl::NotFoundError(
-          absl::StrCat("Engine type not found: ", engine_type));
+      return absl::NotFoundError(absl::StrCat("Engine type not found: ",
+                                              EngineTypeToString(engine_type)));
     }
     return it->second(std::move(settings), input_prompt_as_hint);
   };
@@ -145,7 +185,34 @@ class EngineFactory {
   }
 
  private:
+  EngineFactory()
+      : preferred_engines_({
+            {Backend::CPU,
+             {
+                 EngineType::kAdvancedLiteRTCompiledModel,
+                 EngineType::kLiteRTCompiledModel,
+             }},
+            {Backend::GPU,
+             {
+                 EngineType::kAdvancedLiteRTCompiledModel,
+                 EngineType::kLiteRTCompiledModel,
+             }},
+            {Backend::GPU_ARTISAN,
+             {
+                 EngineType::kAdvancedLegacyTfLite,
+                 EngineType::kLegacyTfLite,
+             }},
+            {Backend::NPU,
+             {
+                 EngineType::kAdvancedLiteRTCompiledModel,
+                 EngineType::kLiteRTCompiledModel,
+             }},
+        }) {}
+
   absl::flat_hash_map<EngineType, Creator> registry_;
+  // Map of preferred engine types for each backend. The first available
+  // (registered) engine type in the list will be selected by CreateDefault().
+  absl::flat_hash_map<Backend, std::vector<EngineType>> preferred_engines_;
 };
 
 // Helper struct to register an engine type with the EngineFactory.
