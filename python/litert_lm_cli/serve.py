@@ -386,7 +386,6 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
           )
           return
 
-        # TODO: b/507147993 - Handle client early disconnects robustly.
         # Handle streaming response using Server-Sent Events (SSE).
         # We send response.created, response.output_text.delta, and
         # response.completed events.
@@ -433,6 +432,7 @@ class OpenAIHandler(http.server.BaseHTTPRequestHandler):
           self.wfile.flush()
         except Exception as e:
           click.echo(click.style(f"Error during streaming: {e!r}", fg="red"))
+          conv.cancel_process()
           try:
             self.wfile.write(
                 "event: response.error\ndata:"
