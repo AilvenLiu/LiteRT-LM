@@ -380,8 +380,8 @@ py_wheel(
         "//conditions:default": "litert-lm-api",
     }),
     platform = select({
-        ":wheel_platform_linux_x86_64": "manylinux_2_35_x86_64",
-        ":wheel_platform_linux_arm64": "manylinux_2_35_aarch64",
+        ":wheel_platform_linux_x86_64": "manylinux_2_27_x86_64",
+        ":wheel_platform_linux_arm64": "manylinux_2_27_aarch64",
         ":wheel_platform_macos_arm64": "macosx_12_0_arm64",
         ":wheel_platform_windows_x86_64": "win_amd64",
         "//conditions:default": "any",
