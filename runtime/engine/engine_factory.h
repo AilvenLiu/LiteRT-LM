@@ -16,6 +16,7 @@
 #define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_ENGINE_ENGINE_FACTORY_H_
 
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -209,10 +210,14 @@ class EngineFactory {
              }},
         }) {}
 
-  absl::flat_hash_map<EngineType, Creator> registry_;
+  // Use std::map instead of absl::flat_hash_map to avoid Windows build/linker
+  // issues across DLL boundaries (see cl/403158423 and b/508692203).
+  // std::map can also be faster when the number of elements is low.
+  std::map<EngineType, Creator> registry_;
   // Map of preferred engine types for each backend. The first available
   // (registered) engine type in the list will be selected by CreateDefault().
-  absl::flat_hash_map<Backend, std::vector<EngineType>> preferred_engines_;
+  // Use std::map for consistency with registry_ and to avoid similar Windows issues.
+  std::map<Backend, std::vector<EngineType>> preferred_engines_;
 };
 
 // Helper struct to register an engine type with the EngineFactory.
