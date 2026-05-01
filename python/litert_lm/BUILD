@@ -258,8 +258,8 @@ genrule(
 genrule(
     name = "copy_prebuilt_litert_lm_so",
     srcs = select({
-        "//build_config:linux_x86_64": ["//prebuilt/linux_x86_64:liblitert-lm.so"],
-        "//build_config:linux_arm64": ["//prebuilt/linux_arm64:liblitert-lm.so"],
+        ":wheel_platform_linux_x86_64": ["//prebuilt/linux_x86_64:liblitert-lm.so"],
+        ":wheel_platform_linux_arm64": ["//prebuilt/linux_arm64:liblitert-lm.so"],
         "//conditions:default": [],
     }),
     outs = ["liblitert-lm.so"],
