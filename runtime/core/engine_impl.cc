@@ -317,6 +317,12 @@ absl::StatusOr<std::unique_ptr<Engine>> EngineImpl::Create(
         model_resources->GetTFLiteModelBackendConstraint(
             ModelType::kTfLiteVisionEncoder),
         model_resources->GetTFLiteModelBackendConstraint(
+            ModelType::kTfLiteAudioEncoderHw),
+        model_resources->GetTFLiteModelPreferActivationType(
+            ModelType::kTfLitePrefillDecode),
+        model_resources->GetTFLiteModelPreferActivationType(
+            ModelType::kTfLiteVisionEncoder),
+        model_resources->GetTFLiteModelPreferActivationType(
             ModelType::kTfLiteAudioEncoderHw)));
   } else {
     // If the model type is available, wait for the tokenizer to be created
@@ -337,6 +343,12 @@ absl::StatusOr<std::unique_ptr<Engine>> EngineImpl::Create(
         model_resources->GetTFLiteModelBackendConstraint(
             ModelType::kTfLiteVisionEncoder),
         model_resources->GetTFLiteModelBackendConstraint(
+            ModelType::kTfLiteAudioEncoderHw),
+        model_resources->GetTFLiteModelPreferActivationType(
+            ModelType::kTfLitePrefillDecode),
+        model_resources->GetTFLiteModelPreferActivationType(
+            ModelType::kTfLiteVisionEncoder),
+        model_resources->GetTFLiteModelPreferActivationType(
             ModelType::kTfLiteAudioEncoderHw)));
   }
 
@@ -389,6 +401,12 @@ absl::StatusOr<std::unique_ptr<Engine>> EngineImpl::Create(
         model_resources->GetTFLiteModelBackendConstraint(
             ModelType::kTfLiteVisionEncoder),
         model_resources->GetTFLiteModelBackendConstraint(
+            ModelType::kTfLiteAudioEncoderHw),
+        model_resources->GetTFLiteModelPreferActivationType(
+            ModelType::kTfLitePrefillDecode),
+        model_resources->GetTFLiteModelPreferActivationType(
+            ModelType::kTfLiteVisionEncoder),
+        model_resources->GetTFLiteModelPreferActivationType(
             ModelType::kTfLiteAudioEncoderHw)));
     // As we load the tokenizer asynchronously, we need to update the executor
     // settings after the tokenizer is loaded.
