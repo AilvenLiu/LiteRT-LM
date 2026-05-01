@@ -929,9 +929,11 @@ cc_library(
         "@litert//litert/cc:litert_tensor_buffer_types",
         "//runtime/components:model_resources",
         "//runtime/engine:io_types",
+        "//runtime/util:convert_tensor_buffer",
         "//runtime/util:file_util",
         "//runtime/util:litert_status_util",
         "//runtime/util:scoped_file",
+        "//runtime/util:tensor_buffer_util",
         "@litert//tflite/types:half",
     ] + select({
         "@litert//litert:litert_link_capi_so": [

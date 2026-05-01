@@ -56,9 +56,10 @@
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/litert_compiled_model_executor_utils.h"
 #include "runtime/executor/llm_executor_io_types.h"
+#include "runtime/util/convert_tensor_buffer.h"
 #include "runtime/util/file_util.h"
 #include "runtime/util/scoped_file.h"
-#include "runtime/util/status_macros.h"  //NOLINT
+#include "runtime/util/tensor_buffer_util.h"
 #include "tflite/types/half.h"  // from @litert
 
 namespace litert::lm {
@@ -838,8 +839,7 @@ AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::CreateNewContext() {
       // state.
       continue;
     }
-    LITERT_ASSIGN_OR_RETURN(auto new_buffer, compiled_model_.CreateInputBuffer(
-                                                 signature.Key(), name));
+    LITERT_ASSIGN_OR_RETURN(auto new_buffer, CopyTensorBuffer(env_, buffer));
     if (name == kPrevMaskName) {
       LITERT_ASSIGN_OR_RETURN(auto prev_mask_type, buffer.TensorType());
       LITERT_ASSIGN_OR_RETURN(int prev_mask_size,
@@ -860,15 +860,13 @@ absl::StatusOr<std::unique_ptr<AudioStreamingContext>>
 AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::CloneContext() {
   absl::flat_hash_map<absl::string_view, ::litert::TensorBuffer> state_buffers;
   LITERT_ASSIGN_OR_RETURN(auto signature, compiled_model_.GetSignature(0));
-  for (auto& [name, buffer] : input_buffers_map_) {
+  for (const auto& [name, buffer] : input_buffers_map_) {
     if (name == kSegmentValuesName || name == kSegmentMaskName) {
       // Skip the segment values and mask buffers as they are not part of the
       // state.
       continue;
     }
-    LITERT_ASSIGN_OR_RETURN(auto new_buffer, compiled_model_.CreateInputBuffer(
-                                                 signature.Key(), name));
-    RETURN_IF_ERROR(CopyBuffer(buffer, new_buffer));
+    LITERT_ASSIGN_OR_RETURN(auto new_buffer, CopyTensorBuffer(env_, buffer));
     state_buffers[name] = std::move(new_buffer);
   }
   auto audio_streaming_context =
@@ -890,8 +888,28 @@ AudioLiteRtCompiledModelExecutor::AudioStreamingEncoder::RestoreContext(
       // state.
       continue;
     }
-    LITERT_ASSIGN_OR_RETURN(auto buffer_copy, buffer.Duplicate());
-    input_buffers_map_[name] = std::move(buffer_copy);
+
+    if (input_buffers_map_[name].IsMetalMemory()) {
+      // b/505373949#comment13: A temporary fix for Metal memory leak.
+      LITERT_ASSIGN_OR_RETURN(auto tensor_type, buffer.TensorType());
+      if (tensor_type.ElementType() == ElementType::Float32) {
+        LITERT_ASSIGN_OR_RETURN(auto data_span,
+                                ReferTensorBufferAsSpan<float>(buffer));
+        LITERT_RETURN_IF_ERROR(
+            input_buffers_map_[name].Write<float>(data_span));
+      } else if (tensor_type.ElementType() == ElementType::Bool) {
+        LITERT_ASSIGN_OR_RETURN(auto data_span,
+                                ReferTensorBufferAsSpan<bool>(buffer));
+        LITERT_RETURN_IF_ERROR(input_buffers_map_[name].Write<bool>(data_span));
+      } else {
+        return absl::InvalidArgumentError(
+            absl::StrCat("Unsupported element type for state buffer: ",
+                         tensor_type.ElementType()));
+      }
+    } else {
+      LITERT_ASSIGN_OR_RETURN(auto buffer_copy, buffer.Duplicate());
+      input_buffers_map_[name] = std::move(buffer_copy);
+    }
   }
   return absl::OkStatus();
 }
