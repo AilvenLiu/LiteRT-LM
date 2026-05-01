@@ -41,6 +41,7 @@
 #include "runtime/executor/executor_settings_base.h"
 #include "runtime/executor/llm_executor_settings.h"
 #include "runtime/proto/sampler_params.pb.h"
+#include "runtime/util/file_util.h"
 #include "runtime/util/logging.h"
 #include "schema/capabilities/capabilities_c.h"
 #include "tflite/logger.h"  // from @litert
@@ -69,6 +70,7 @@ using litert::lm::ConversationConfig;
 using litert::lm::Engine;
 using litert::lm::EngineFactory;
 using litert::lm::EngineSettings;
+using litert::lm::FileExists;
 using litert::lm::InputAudio;
 using litert::lm::InputData;
 using litert::lm::InputImage;
@@ -352,9 +354,7 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateEngine)(
   std::string model_path_str(model_path_chars);
   env->ReleaseStringUTFChars(model_path, model_path_chars);
 
-  // Check if the file exists.
-  struct stat buffer;
-  if (stat(model_path_str.c_str(), &buffer) != 0) {
+  if (!FileExists(model_path_str)) {
     ThrowLiteRtLmJniException(env, "Model file not found: " + model_path_str);
     return 0;
   }
@@ -527,9 +527,7 @@ LITERTLM_JNIEXPORT jlong JNICALL JNI_METHOD(nativeCreateBenchmark)(
   std::string model_path_str(model_path_chars);
   env->ReleaseStringUTFChars(model_path, model_path_chars);
 
-  // Check if the file exists.
-  struct stat buffer;
-  if (stat(model_path_str.c_str(), &buffer) != 0) {
+  if (!FileExists(model_path_str)) {
     ThrowLiteRtLmJniException(env, "Model file not found: " + model_path_str);
     return 0;
   }

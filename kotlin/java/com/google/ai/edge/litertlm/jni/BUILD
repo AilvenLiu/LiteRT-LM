@@ -45,6 +45,7 @@ cc_binary(
         "//runtime/executor:executor_settings_base",
         "//runtime/executor:llm_executor_settings",
         "//runtime/proto:sampler_params_cc_proto",
+        "//runtime/util:file_util",
         "//runtime/util:litert_lm_loader",
         "//runtime/util:logging",
         "//schema/capabilities:capabilities_c",
