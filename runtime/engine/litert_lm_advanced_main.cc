@@ -238,6 +238,7 @@ absl::Status MainHelper(int argc, char** argv) {
   settings.gpu_madvise_original_shared_tensors =
       absl::GetFlag(FLAGS_gpu_madvise_original_shared_tensors);
   settings.disable_cache = absl::GetFlag(FLAGS_disable_cache);
+  settings.cache_dir = absl::GetFlag(FLAGS_cache_dir);
   settings.cache_compiled_shaders_only =
       absl::GetFlag(FLAGS_cache_compiled_shaders_only);
   settings.preferred_device_substr =
